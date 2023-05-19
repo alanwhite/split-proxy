@@ -11,10 +11,6 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 
 	private Clock clock;
 	
-	private Queue<PriorityQueueEntry> rcvQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
-	private long lastMessageTime = 0;
-	private int sequence = 0;
-	
 	public WsMuxMessageBroker() {
 		this(Clock.systemDefaultZone());
 	}
@@ -22,6 +18,21 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 	protected WsMuxMessageBroker(Clock clock) {
 		this.clock = clock;
 	}
+	
+	private WsSession session;
+	
+	@Override
+	public void onOpen(WsSession session) {
+		this.session = session;
+	}
+
+	/*
+	 * Receiving messages from the WebSocket
+	 */
+	
+	private Queue<PriorityQueueEntry> rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+	private long lastRxMessageTime = 0;
+	private int rxSequence = 0;
 	
 	@Override
 	/**
@@ -32,30 +43,59 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 
 		var now = clock.millis();
 		
-		if ( now == lastMessageTime ) 
-			++sequence;
+		if ( now == lastRxMessageTime ) 
+			++rxSequence;
 		else {
-			lastMessageTime = now;
-			sequence = 0;
+			lastRxMessageTime = now;
+			rxSequence = 0;
 		}
 		
-		rcvQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,sequence,buffer));
+		rxQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,rxSequence,buffer));
 	}
 
 	@Override
 	/**
-	 * Exposes the received message queue. Messages will be in priory and received order
-	 * @return the prioritised receive message queue
+	 * Exposes the received message queue. Messages will be in priority and received order
+	 * @return the prioritized receive message queue
 	 */
 	public Queue<PriorityQueueEntry> getRxQueue() {
-		return rcvQueue;
+		return rxQueue;
 	}
 
-	@Override
-	public Queue<?> getTxQueue() {
-		// TODO Auto-generated method stub
-		return null;
+	/*
+	 * Sending messages to the WebSocket
+	 */
+	
+	private Queue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+	private long lastTxMessageTime = 0;
+	private int txSequence = 0;
+	
+	public boolean sendMessage(BufferData buffer) {
+		
+		var now = clock.millis();
+		
+		if ( now == lastTxMessageTime ) 
+			++txSequence;
+		else {
+			lastTxMessageTime = now;
+			txSequence = 0;
+		}
+		
+		return txQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,txSequence,buffer));
 	}
+	
+	// need something to be listening on the txq, and using session.send, should be started when the session is open, stopped when closed
+	
+	@Override
+	/**
+	 * Exposes the underlying transmit message queue. Messages will be in priority and received order
+	 * @return the prioritized receive message queue
+	 */
+	public Queue<PriorityQueueEntry> getTxQueue() {
+		return txQueue;
+	}
+
+
 
 
 
