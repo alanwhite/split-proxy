@@ -2,7 +2,6 @@ package xyz.arwhite.net.mux;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.time.Clock;
 import java.time.Duration;
 
 import com.mercateo.test.clock.*;
@@ -86,6 +85,59 @@ class WsMuxMessageBrokerTest {
 			
 			lastSeq = qe.sequence();
 		}
+		
+	}
+	
+	@Test
+	@DisplayName("RxQueue Test Complex Priority Order")
+	void testRxComplexOrder() {
+		
+		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
+		var mb = new WsMuxMessageBroker(moclock);
+		
+		var msg1 = BufferData.create(16);
+		msg1.writeInt8(3);
+		msg1.writeInt8(3); // expect 3rd
+		mb.onMessage(null, msg1, true);
+		
+		var msg2 = BufferData.create(16);
+		msg2.writeInt8(3);
+		msg2.writeInt8(4); // expect 4th
+		mb.onMessage(null, msg2, true);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg3 = BufferData.create(16);
+		msg3.writeInt8(1);
+		msg3.writeInt8(1); // expect 1st
+		mb.onMessage(null, msg3, true);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg4 = BufferData.create(16);
+		msg4.writeInt8(2);
+		msg4.writeInt8(2); // expect 2nd
+		mb.onMessage(null, msg4, true);
+		
+		var pbq = mb.getRxQueue();
+		
+		var qe = pbq.poll();
+		assertNotNull(qe);
+		assertEquals(1,qe.priority());
+		assertEquals(1,qe.message().get(1));
+		
+		qe = pbq.poll();
+		assertNotNull(qe);
+		assertEquals(2,qe.priority());
+		assertEquals(2,qe.message().get(1));
+		
+		qe = pbq.poll();
+		assertNotNull(qe);
+		assertEquals(3,qe.priority());
+		assertEquals(3,qe.message().get(1));
+		
+		qe = pbq.poll();
+		assertNotNull(qe);
+		assertEquals(3,qe.priority());
+		assertEquals(4,qe.message().get(1));
 		
 	}
 
