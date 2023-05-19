@@ -8,8 +8,10 @@ import com.mercateo.test.clock.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.time.Instant;
 import io.helidon.common.buffers.BufferData;
+import io.helidon.nima.websocket.WsSession;
 
 class WsMuxMessageBrokerTest {
 
@@ -268,4 +270,97 @@ class WsMuxMessageBrokerTest {
 		assertEquals(4,qe.message().get(1));
 		
 	}
+	
+	// test that when we send messages in they get added to the WebSocket in the right order
+	// we've tested various scenarios already so this is about the plumbing working
+	
+	@Test
+	@DisplayName("TxQueue Test Consumption")
+	void testTxConsumption() throws InterruptedException {
+
+		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
+		var mb = new WsMuxMessageBroker(moclock);
+		ArrayList<BufferData> bufList = new ArrayList<BufferData>();
+		
+		mb.onOpen(new WsSession() {
+
+			@Override
+			public WsSession send(String text, boolean last) {
+				return null;
+			}
+
+			@Override
+			public WsSession send(BufferData bufferData, boolean last) {
+				bufList.add(bufferData);
+				return this;
+			}
+
+			@Override
+			public WsSession ping(BufferData bufferData) {
+				return null;
+			}
+
+			@Override
+			public WsSession pong(BufferData bufferData) {
+				return null;
+			}
+
+			@Override
+			public WsSession close(int code, String reason) {
+				return null;
+			}
+
+			@Override
+			public WsSession terminate() {
+				return null;
+			}
+			
+		});
+
+		Thread.sleep(Duration.ofSeconds(1));
+		
+		var msg1 = BufferData.create(16);
+		msg1.writeInt8(3);
+		mb.sendMessage(msg1);
+		
+		var msg2 = BufferData.create(16);
+		msg2.writeInt8(3);
+		mb.sendMessage(msg2);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg3 = BufferData.create(16);
+		msg3.writeInt8(1);
+		mb.sendMessage(msg3);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg4 = BufferData.create(16);
+		msg4.writeInt8(2);
+		mb.sendMessage(msg4);
+		
+		var msg5 = BufferData.create(16);
+		msg5.writeInt8(3);
+		mb.sendMessage(msg5);
+		
+		var msg6 = BufferData.create(16);
+		msg6.writeInt8(3);
+		mb.sendMessage(msg6);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg7 = BufferData.create(16);
+		msg7.writeInt8(1);
+		mb.sendMessage(msg7);
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg8 = BufferData.create(16);
+		msg8.writeInt8(2);
+		mb.sendMessage(msg8);
+	
+		Thread.sleep(Duration.ofSeconds(1));
+		
+		mb.onClose(null, 0, null);
+		assertEquals(8,bufList.size());
+		
+		// order is unpredictable due to timing between threads
+	}
+	
 }

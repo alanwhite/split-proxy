@@ -4,6 +4,7 @@ import io.helidon.common.buffers.BufferData;
 import io.helidon.nima.websocket.WsListener;
 import io.helidon.nima.websocket.WsSession;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.time.Clock;
 import java.util.Queue;
 
@@ -20,17 +21,43 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 	}
 	
 	private WsSession session;
+	private Thread txQueueSender;
 	
 	@Override
 	public void onOpen(WsSession session) {
 		this.session = session;
+		
+		CompletableFuture<Void> started = new CompletableFuture<>();
+		txQueueSender = Thread.ofVirtual().start(() -> {
+			try {
+				started.complete(null);
+				while(true) {
+					var qe = txQueue.take();
+					WsMuxMessageBroker.this.session.send(qe.message(), true);
+				} 
+			} catch(InterruptedException e) {}
+		});
+		
+        try {
+            started.toCompletableFuture().get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+	}
+	
+	@Override
+	public void onClose(WsSession session, int status, String reason) {
+		if ( txQueueSender != null )
+			txQueueSender.interrupt();
+		
+		txQueueSender = null;
 	}
 
 	/*
 	 * Receiving messages from the WebSocket
 	 */
 	
-	private Queue<PriorityQueueEntry> rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+	private PriorityBlockingQueue<PriorityQueueEntry> rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
 	private long lastRxMessageTime = 0;
 	private int rxSequence = 0;
 	
@@ -51,6 +78,7 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 		}
 		
 		rxQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,rxSequence,buffer));
+		
 	}
 
 	@Override
@@ -66,7 +94,7 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 	 * Sending messages to the WebSocket
 	 */
 	
-	private Queue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+	private PriorityBlockingQueue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
 	private long lastTxMessageTime = 0;
 	private int txSequence = 0;
 	
@@ -94,9 +122,5 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 	public Queue<PriorityQueueEntry> getTxQueue() {
 		return txQueue;
 	}
-
-
-
-
 
 }
