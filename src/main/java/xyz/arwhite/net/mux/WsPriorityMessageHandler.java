@@ -5,39 +5,56 @@ import io.helidon.nima.websocket.WsListener;
 import io.helidon.nima.websocket.WsSession;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.time.Clock;
 import java.util.Queue;
 
-public class WsMuxMessageBroker implements WsListener, MessageBroker {
+public class WsPriorityMessageHandler implements WsListener, MessageBroker {
 
 	private Clock clock;
 	
-	public WsMuxMessageBroker() {
+	public WsPriorityMessageHandler() {
 		this(Clock.systemDefaultZone());
 	}
 	
-	protected WsMuxMessageBroker(Clock clock) {
+	protected WsPriorityMessageHandler(Clock clock) {
 		this.clock = clock;
 	}
 	
 	private WsSession session;
 	private Thread txQueueSender;
+	private CompletableFuture<Void> txStopped;
 	
 	@Override
 	public void onOpen(WsSession session) {
 		this.session = session;
 		
 		CompletableFuture<Void> started = new CompletableFuture<>();
+		txStopped = new CompletableFuture<>();
+
 		txQueueSender = Thread.ofVirtual().start(() -> {
 			try {
 				started.complete(null);
 				while(true) {
 					var qe = txQueue.take();
-					WsMuxMessageBroker.this.session.send(qe.message(), true);
+					
+					if ( qe.priority() == 0 ) {
+						
+						// drain the queue
+						while( !txQueue.isEmpty() ) {
+							var de = txQueue.poll();
+							WsPriorityMessageHandler.this.session.send(de.message(), true);
+						}
+						
+						// inform the world
+						txStopped.complete(null);
+						
+					} else
+						WsPriorityMessageHandler.this.session.send(qe.message(), true);
 				} 
 			} catch(InterruptedException e) {}
 		});
-		
+			
         try {
             started.toCompletableFuture().get();
         } catch (Exception e) {
@@ -97,8 +114,20 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 	private PriorityBlockingQueue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
 	private long lastTxMessageTime = 0;
 	private int txSequence = 0;
+	private boolean draining = false;
 	
+	/**
+	 * Used to queue a message to be transmitted. Priority is specified in the first byte of the BufferData.
+	 * Priority 0 is reserved for system use, this method will reject messages with priority 0.
+	 */
+	@Override
 	public boolean sendMessage(BufferData buffer) {
+		
+		if ( draining )
+			return false;
+		
+		if ( buffer.get(0) == 0 )
+			return false;
 		
 		var now = clock.millis();
 		
@@ -112,8 +141,25 @@ public class WsMuxMessageBroker implements WsListener, MessageBroker {
 		return txQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,txSequence,buffer));
 	}
 	
-	// need something to be listening on the txq, and using session.send, should be started when the session is open, stopped when closed
-	
+	/**
+	 * Prevents submission of new messages to the transmit queue, and waits for the queue to be drained
+	 */
+	public void drainTxQueue() {
+		draining = true;
+
+		if ( txStopped != null ) {
+			var command = BufferData.create(1);
+			command.writeInt8(0);
+			txQueue.add(new PriorityQueueEntry((byte) 0,clock.millis(),0,command));
+
+			try {
+				txStopped.get();
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
 	@Override
 	/**
 	 * Exposes the underlying transmit message queue. Messages will be in priority and received order

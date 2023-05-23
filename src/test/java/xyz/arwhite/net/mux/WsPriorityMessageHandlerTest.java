@@ -13,13 +13,13 @@ import java.time.Instant;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.nima.websocket.WsSession;
 
-class WsMuxMessageBrokerTest {
+class WsPriorityMessageHandlerTest {
 
 	@Test
 	@DisplayName("RxQueue Test Priority Order")
 	void testRxPriorityOrder() {
 
-		var mb = new WsMuxMessageBroker();
+		var mb = new WsPriorityMessageHandler();
 
 		for (byte i = 0; i < 3; i++ ) {
 			var buffer = BufferData.create(16);
@@ -42,7 +42,7 @@ class WsMuxMessageBrokerTest {
 	void testRxTimestampOrder() {
 		
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		for (byte i = 0; i < 3; i++ ) {
 			var buffer = BufferData.create(16);
@@ -69,7 +69,7 @@ class WsMuxMessageBrokerTest {
 	void testRxSequenceOrder() {
 
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		for (byte i = 0; i < 3; i++ ) {
 			var buffer = BufferData.create(16);
@@ -95,7 +95,7 @@ class WsMuxMessageBrokerTest {
 	void testRxComplexOrder() {
 		
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		var msg1 = BufferData.create(16);
 		msg1.writeInt8(3);
@@ -147,17 +147,17 @@ class WsMuxMessageBrokerTest {
 	@DisplayName("TxQueue Test Priority Order")
 	void testTxPriorityOrder() {
 
-		var mb = new WsMuxMessageBroker();
+		var mb = new WsPriorityMessageHandler();
 
-		for (byte i = 0; i < 3; i++ ) {
+		for (byte i = 1; i < 4; i++ ) {
 			var buffer = BufferData.create(16);
 			buffer.writeInt8(i); // priority
-			mb.sendMessage(buffer);
+			assertTrue(mb.sendMessage(buffer));
 		}
 		
 		var pbq = mb.getTxQueue();
 		
-		for (byte i = 0; i < 3; i++ ) {
+		for (byte i = 1; i < 4; i++ ) {
 			var qe = pbq.poll();
 			assertNotNull(qe);
 			assertEquals(i,qe.priority());
@@ -170,13 +170,13 @@ class WsMuxMessageBrokerTest {
 	void testTxTimestampOrder() {
 		
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		for (byte i = 0; i < 3; i++ ) {
 			var buffer = BufferData.create(16);
 			buffer.writeInt8(1); // priority
 			moclock.fastForward(Duration.ofMillis(1));
-			mb.sendMessage(buffer);
+			assertTrue(mb.sendMessage(buffer));
 		}
 		
 		var pbq = mb.getTxQueue();
@@ -197,12 +197,12 @@ class WsMuxMessageBrokerTest {
 	void testTxSequenceOrder() {
 
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		for (byte i = 0; i < 3; i++ ) {
 			var buffer = BufferData.create(16);
 			buffer.writeInt8(1); // priority
-			mb.sendMessage(buffer);
+			assertTrue(mb.sendMessage(buffer));
 		}
 		
 		var pbq = mb.getTxQueue();
@@ -223,29 +223,29 @@ class WsMuxMessageBrokerTest {
 	void testTxComplexOrder() {
 		
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		
 		var msg1 = BufferData.create(16);
 		msg1.writeInt8(3);
 		msg1.writeInt8(3); // expect 3rd
-		mb.sendMessage(msg1);
+		assertTrue(mb.sendMessage(msg1));
 		
 		var msg2 = BufferData.create(16);
 		msg2.writeInt8(3);
 		msg2.writeInt8(4); // expect 4th
-		mb.sendMessage(msg2);
+		assertTrue(mb.sendMessage(msg2));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg3 = BufferData.create(16);
 		msg3.writeInt8(1);
 		msg3.writeInt8(1); // expect 1st
-		mb.sendMessage(msg3);
+		assertTrue(mb.sendMessage(msg3));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg4 = BufferData.create(16);
 		msg4.writeInt8(2);
 		msg4.writeInt8(2); // expect 2nd
-		mb.sendMessage(msg4);
+		assertTrue(mb.sendMessage(msg4));
 		
 		var pbq = mb.getTxQueue();
 		
@@ -279,7 +279,7 @@ class WsMuxMessageBrokerTest {
 	void testTxConsumption() throws InterruptedException {
 
 		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
-		var mb = new WsMuxMessageBroker(moclock);
+		var mb = new WsPriorityMessageHandler(moclock);
 		ArrayList<BufferData> bufList = new ArrayList<BufferData>();
 		
 		mb.onOpen(new WsSession() {
@@ -321,41 +321,41 @@ class WsMuxMessageBrokerTest {
 		
 		var msg1 = BufferData.create(16);
 		msg1.writeInt8(3);
-		mb.sendMessage(msg1);
+		assertTrue(mb.sendMessage(msg1));
 		
 		var msg2 = BufferData.create(16);
 		msg2.writeInt8(3);
-		mb.sendMessage(msg2);
+		assertTrue(mb.sendMessage(msg2));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg3 = BufferData.create(16);
 		msg3.writeInt8(1);
-		mb.sendMessage(msg3);
+		assertTrue(mb.sendMessage(msg3));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg4 = BufferData.create(16);
 		msg4.writeInt8(2);
-		mb.sendMessage(msg4);
+		assertTrue(mb.sendMessage(msg4));
 		
 		var msg5 = BufferData.create(16);
 		msg5.writeInt8(3);
-		mb.sendMessage(msg5);
+		assertTrue(mb.sendMessage(msg5));
 		
 		var msg6 = BufferData.create(16);
 		msg6.writeInt8(3);
-		mb.sendMessage(msg6);
+		assertTrue(mb.sendMessage(msg6));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg7 = BufferData.create(16);
 		msg7.writeInt8(1);
-		mb.sendMessage(msg7);
+		assertTrue(mb.sendMessage(msg7));
 		
 		moclock.fastForward(Duration.ofMillis(1));
 		var msg8 = BufferData.create(16);
 		msg8.writeInt8(2);
-		mb.sendMessage(msg8);
+		assertTrue(mb.sendMessage(msg8));
 	
-		Thread.sleep(Duration.ofSeconds(1));
+		mb.drainTxQueue();
 		
 		mb.onClose(null, 0, null);
 		assertEquals(8,bufList.size());
