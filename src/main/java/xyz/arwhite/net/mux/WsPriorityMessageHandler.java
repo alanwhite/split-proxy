@@ -5,7 +5,6 @@ import io.helidon.nima.websocket.WsListener;
 import io.helidon.nima.websocket.WsSession;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.time.Clock;
 import java.util.Queue;
 
