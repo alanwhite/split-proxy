@@ -34,15 +34,16 @@ public class StreamMap extends ConcurrentHashMap<Integer, Stream> {
 	 * Find an unused entry in the map
 	 * @return
 	 * @throws IOException
+	 * @throws LimitExceededException 
 	 */
-	public int allocNewStreamId() throws IOException {
+	public int allocNewStreamId() throws LimitExceededException, IllegalArgumentException {
 		int localStreamId = -1;
 
 		slotLock.lock();
 		try {
 			localStreamId = slots.nextClearBit(0);
 			if ( localStreamId == -1 || localStreamId >= MAX_STREAMS ) 
-				throw (new IOException(new LimitExceededException("stream id limit reached")));
+				throw (new LimitExceededException("stream id limit reached"));
 
 			slots.set(localStreamId);
 		} finally { // as soon as poss.
@@ -56,14 +57,14 @@ public class StreamMap extends ConcurrentHashMap<Integer, Stream> {
 	public void freeStreamId(int streamId) throws IOException {
 
 		if ( streamId >= MAX_STREAMS ) 
-			throw (new IOException(new IllegalArgumentException("stream id exceeds limit")));
+			throw (new IllegalArgumentException("stream id exceeds limit"));
 		
 		slotLock.lock();
 		try {
 			if ( slots.get(streamId) ) 
 				slots.clear(streamId);
 			else
-				throw (new IOException(new IllegalArgumentException("stream id not in use")));
+				throw (new IllegalArgumentException("stream id not in use"));
 
 		} finally { // as soon as poss.
 			slotLock.unlock();

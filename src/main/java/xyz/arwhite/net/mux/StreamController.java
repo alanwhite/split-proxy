@@ -3,6 +3,9 @@ package xyz.arwhite.net.mux;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+
+import javax.naming.LimitExceededException;
+
 import io.helidon.common.buffers.BufferData;
 
 public class StreamController {
@@ -113,9 +116,10 @@ public class StreamController {
 	
 	/**
 	 * Blocks awaiting a new stream request from the message broker
-	 * @throws IOException 
+	 * @throws IllegalArgumentException 
+	 * @throws LimitExceededException 
 	 */
-	public Stream accept() throws IOException {
+	public Stream accept() throws LimitExceededException, IllegalArgumentException {
 		
 		try {
 			var connectRequest = newStreamQueue.take();
