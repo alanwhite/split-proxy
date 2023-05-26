@@ -50,6 +50,17 @@ public class SplitProxy {
 		/*
 		 * First let's build and test the StreamController and Stream classes.
 		 */
+		
+		// build the websocket
+		
+		// create a stream controller for the websocket
+		
+		// create a listening thread that listens on a stream port (we're going to assume 258 for this example)
+		// it listens by getting a stream listener instance from the stream controller
+		// we could create a stream listener factory (stream server factory) with the stream controller injected
+		// this code would then use the stream listener factory (server stream factory) to create a stream listener (stream server) for a given stream port
+		
+		// the thread then loops on the accept method of the stream server object which suspends until a stream request comes in
 	}
 
 }

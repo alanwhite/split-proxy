@@ -1,5 +1,7 @@
 package xyz.arwhite.net.mux;
 
+// analagous to a Socket in the sockets world
+
 // can't be a record, we need to update the remoteId when received
 
 // probs have a queue in here for recvd IO, check for CC close confirms etc
