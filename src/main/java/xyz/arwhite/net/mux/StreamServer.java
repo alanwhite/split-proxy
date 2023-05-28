@@ -27,7 +27,7 @@ public class StreamServer {
 	 * @param stream
 	 * @return
 	 */
-	public boolean executeStream(Stream stream) {
+	public boolean connectStream(Stream stream) {
 		// TODO: have this attempt to add to queue (locking it), send the CC or CF if full, unlock finally.
 		return streams.offer(stream);
 	}

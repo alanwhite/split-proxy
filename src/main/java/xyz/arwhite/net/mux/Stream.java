@@ -8,6 +8,7 @@ package xyz.arwhite.net.mux;
 
 public class Stream {
 
+	private StreamController controller;
 	private int localId;
 	private int remoteId;
 	
@@ -17,7 +18,7 @@ public class Stream {
 	 */
 	private int priority;
 	
-	public Stream(int localId, int remoteId, int priority) {
+	public Stream(StreamController controller, int localId, int remoteId, int priority) {
 		this.setLocalId(localId);
 		this.setRemoteId(remoteId);
 		this.setPriority(priority);

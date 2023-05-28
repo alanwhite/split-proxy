@@ -109,7 +109,7 @@ public class StreamController {
 							int localStreamId = streams.allocNewStreamId();
 
 							// create Stream object for this connection, containing the local and remote streamIds
-							var stream = new Stream(localStreamId, connectRequest.remoteId, connectRequest.priority);
+							var stream = new Stream(StreamController.this, localStreamId, connectRequest.remoteId, connectRequest.priority);
 
 							// add entry to Streams map 
 							streams.put(Integer.valueOf(localStreamId), stream); 
@@ -118,7 +118,7 @@ public class StreamController {
 							broker.sendMessage(StreamBuffers.createConnectConfirm(connectRequest.priority, connectRequest.remoteId, localStreamId));
 
 							// pass the stream object to the listener
-							if ( !listener.executeStream(stream) ) {
+							if ( !listener.connectStream(stream) ) {
 								streams.remove(Integer.valueOf(localStreamId));
 								// TODO: log an error message
 							}
@@ -226,7 +226,7 @@ public class StreamController {
 
 			// create Stream object for this connection, containing the local and remote streamIds
 			// TODO: make priority specifiable
-			var stream = new Stream(localStreamId, 0, priority); 
+			var stream = new Stream(this, localStreamId, 0, priority); 
 
 			// add entry to Streams map 
 			streams.put(Integer.valueOf(localStreamId), stream); 

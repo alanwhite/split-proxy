@@ -78,7 +78,7 @@ class StreamServerTest {
 
 		assertDoesNotThrow( 
 				() -> { 
-					var ss = new StreamServer(new StreamController() {
+					var sc = new StreamController() {
 
 						@Override
 						public boolean deregisterStreamServer(int port) {
@@ -90,7 +90,9 @@ class StreamServerTest {
 							return true;
 						}
 
-					}, 258);
+					}; 
+					
+					var ss = new StreamServer(sc, 258);
 
 					// set up listening for a new Stream
 					var t = Thread.ofVirtual().start(new Runnable() {
@@ -103,7 +105,7 @@ class StreamServerTest {
 					});
 
 					// pop a Stream in
-					ss.executeStream(new Stream(0, 0, 0));
+					ss.connectStream(new Stream(sc, 0, 0, 0));
 
 					// wait for thread to terminate
 					assertTrue(t.join(Duration.ofSeconds(1)));
