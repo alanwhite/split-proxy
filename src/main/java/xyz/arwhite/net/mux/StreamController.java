@@ -45,7 +45,7 @@ public class StreamController {
 		setupConnectDispatcher(connectRequests);
 		setupBroker(this.broker);
 	}
-	
+
 	// Testing purposes only .... Grrrr
 	public StreamController() {
 		// TODO Auto-generated constructor stub
@@ -60,7 +60,7 @@ public class StreamController {
 	public boolean registerStreamServer(int port, StreamServer server) {
 		return streamPorts.putIfAbsent(port, server) == null;
 	}
-	
+
 	/**
 	 * Deregisters any listener on the supplied StreamPort
 	 * @param port the port that is to longer receive connections
@@ -94,13 +94,13 @@ public class StreamController {
 			try {
 				while(true) {
 					var connectRequest = connectRequests.take();
-					
+
 					int errorCode = 0; 
-					
+
 					try { 
-						
+
 						var listener = streamPorts.get(connectRequest.streamPort);
-						
+
 						if ( listener == null ) {
 							// respond to connect request with connect fail as no listener on port
 							errorCode = 1;
@@ -115,36 +115,28 @@ public class StreamController {
 							streams.put(Integer.valueOf(localStreamId), stream); 
 
 							// send a response to the originator saying connect accepted, here's my streamId
-							var connectResponse = BufferData.create(16);
-							connectResponse.writeInt8(connectRequest.priority);
-							connectResponse.writeInt8(connectRequest.remoteId);
-							connectResponse.writeInt8(CONNECT_CONFIRM);
-							connectResponse.writeInt8(localStreamId);
-							broker.sendMessage(connectResponse);
+							broker.sendMessage(StreamBuffers.createConnectConfirm(connectRequest.priority, connectRequest.remoteId, localStreamId));
 
 							// pass the stream object to the listener
 							if ( !listener.executeStream(stream) ) {
 								streams.remove(Integer.valueOf(localStreamId));
 								// TODO: log an error message
 							}
-							
+
 							// it's possible the StreamServer won't process the stream as it's pending queue is full
 							// some form of timeout will need to tell the other end the Confirm should have been a Fail
 							// we could own the queue here, but the server socket sets the queue depth
 							// TODO: resolve this before migrating to a ServerSocket implementation for a StreamServer
+							
+							// maybe move responsibility for the connect confirm / fail to the StreamServer
+							// it needs to be able to send messages in any case
 						}
 					} catch (LimitExceededException lee) {
 						errorCode = 2;
 					}
-					
-					if ( errorCode != 0 ) {
-						var connectResponse = BufferData.create(16);
-						connectResponse.writeInt8(connectRequest.priority);
-						connectResponse.writeInt8(connectRequest.remoteId);
-						connectResponse.writeInt8(CONNECT_FAIL);
-						connectResponse.writeInt16(errorCode);
-						broker.sendMessage(connectResponse);
-					}
+
+					if ( errorCode != 0 ) 
+						broker.sendMessage(StreamBuffers.createConnectFail(connectRequest.priority, connectRequest.remoteId, errorCode));
 				}
 
 			} catch (InterruptedException e) {
@@ -172,9 +164,9 @@ public class StreamController {
 	/**
 	 * Assumed message format:
 	 * byte 0 is priority
-	 * byte 1 is the stream id
+	 * byte 1 is the local stream id
 	 * byte 2 is the message type
-	 * byte 3+ is data
+	 * byte 3+ is message specific properties / data
 	 * 
 	 * @author Alan R. White
 	 *
@@ -221,19 +213,34 @@ public class StreamController {
 
 	}
 
-
-
-
 	/**
 	 * Creates a new stream across the WebSocket
 	 * Specify required priority
 	 * 
 	 * @return
+	 * @throws IOException
 	 */
-	public Stream connect() {
+	public Stream connect(int port) throws IOException {
 
 		// create a stream object, file it with local id
-		// make CR
+		try {
+			int localStreamId = streams.allocNewStreamId();
+			int priority = 64;
+
+			// create Stream object for this connection, containing the local and remote streamIds
+			// TODO: make priority specifiable
+			var stream = new Stream(localStreamId, 0, priority); 
+
+			// add entry to Streams map 
+			streams.put(Integer.valueOf(localStreamId), stream); 
+
+			// send connect request
+			broker.sendMessage(StreamBuffers.createConnectRequest(priority, localStreamId, port));
+			
+		} catch (LimitExceededException | IllegalArgumentException e) {
+			throw new IOException(e);
+		}
+
 		// get remote id from CC, update stream
 
 		/// CC recvd over ws msg queue for this Stream, self-updates the stream object
