@@ -1,6 +1,9 @@
 package xyz.arwhite.net.mux;
 
+import java.nio.ByteBuffer;
+
 import io.helidon.common.buffers.BufferData;
+import xyz.arwhite.net.mux.StreamController.ConnectRequest;
 
 public class StreamBuffers {
 
@@ -12,6 +15,13 @@ public class StreamBuffers {
 		buffer.writeInt8(StreamController.CONNECT_REQUEST);
 		buffer.writeInt16(port);
 		return BufferData.create(16);
+	}
+	
+	public static ConnectRequest parseConnectRequest(BufferData buffer) {
+		byte[] portBuf = {1,2};
+		buffer.read(portBuf, 3, 2);
+		
+		return new ConnectRequest(buffer.get(0), buffer.get(1), ByteBuffer.wrap(portBuf).getInt(), buffer);
 	}
 	
 	public static BufferData createConnectConfirm(int priority, int remoteStreamId, int localStreamId) {

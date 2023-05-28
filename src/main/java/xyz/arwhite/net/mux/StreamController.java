@@ -24,7 +24,7 @@ public class StreamController {
 	private MessageBroker broker;
 	private Thread messageReaderThread;
 
-	private record ConnectRequest(int priority, int remoteId, int streamPort, BufferData buffer ) {};
+	public record ConnectRequest(int priority, int remoteId, int streamPort, BufferData buffer ) {};
 	private record ConnectResponse(int priority, int localId, int remoteId) {};
 
 	private ArrayBlockingQueue<ConnectRequest> connectRequests = new ArrayBlockingQueue<>(NEW_STREAM_QUEUE_DEPTH);
@@ -193,11 +193,8 @@ public class StreamController {
 
 					// must dispatch without blocking
 					if ( command == CONNECT_REQUEST ) {
-						// on Connect Request, bytes 3 & 4 contain the stream port being connected to
-						byte[] portBuf = {1,2};
-						var bytesRead = buffer.read(portBuf, 3, 2);
-						connectRequests.add(
-								new ConnectRequest(buffer.get(0), buffer.get(1), ByteBuffer.wrap(portBuf).getInt(), buffer));
+						// TODO: log error if too many outstanding connect requests
+						connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
 					} else {
 						// TODO: dispatch to stream
 					}
