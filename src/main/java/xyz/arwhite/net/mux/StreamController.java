@@ -1,7 +1,6 @@
 package xyz.arwhite.net.mux;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -114,22 +113,11 @@ public class StreamController {
 							// add entry to Streams map 
 							streams.put(Integer.valueOf(localStreamId), stream); 
 
-							// send a response to the originator saying connect accepted, here's my streamId
-							broker.sendMessage(StreamBuffers.createConnectConfirm(connectRequest.priority, connectRequest.remoteId, localStreamId));
-
 							// pass the stream object to the listener
 							if ( !listener.connectStream(stream) ) {
 								streams.remove(Integer.valueOf(localStreamId));
 								// TODO: log an error message
 							}
-
-							// it's possible the StreamServer won't process the stream as it's pending queue is full
-							// some form of timeout will need to tell the other end the Confirm should have been a Fail
-							// we could own the queue here, but the server socket sets the queue depth
-							// TODO: resolve this before migrating to a ServerSocket implementation for a StreamServer
-							
-							// maybe move responsibility for the connect confirm / fail to the StreamServer
-							// it needs to be able to send messages in any case
 						}
 					} catch (LimitExceededException lee) {
 						errorCode = 2;
@@ -210,6 +198,10 @@ public class StreamController {
 
 	}
 
+	public boolean send(BufferData buffer) {
+		return broker.sendMessage(buffer);
+	}
+	
 	/**
 	 * Creates a new stream across the WebSocket
 	 * Specify required priority

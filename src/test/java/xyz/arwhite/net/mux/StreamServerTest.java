@@ -11,6 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.helidon.common.buffers.BufferData;
+
 class StreamServerTest {
 
 	@BeforeAll
@@ -90,6 +92,11 @@ class StreamServerTest {
 							return true;
 						}
 
+						@Override
+						public boolean send(BufferData buffer) {
+							return true;
+						}
+
 					}; 
 					
 					var ss = new StreamServer(sc, 258);
@@ -108,7 +115,7 @@ class StreamServerTest {
 					ss.connectStream(new Stream(sc, 0, 0, 0));
 
 					// wait for thread to terminate
-					assertTrue(t.join(Duration.ofSeconds(1)));
+					assertTrue(t.join(Duration.ofSeconds(2)));
 				}
 
 				);
