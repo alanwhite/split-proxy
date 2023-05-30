@@ -173,7 +173,7 @@ public class StreamController {
 			try {
 				while(true) {
 					var buffer = rxQueue.take();
-					var command = buffer.get(2);
+					var command = StreamBuffers.getBufferType(buffer);
 
 					// must dispatch without blocking
 					if ( command == StreamBuffers.CONNECT_REQUEST ) {

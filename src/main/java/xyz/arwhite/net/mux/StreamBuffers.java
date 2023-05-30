@@ -7,12 +7,40 @@ import xyz.arwhite.net.mux.StreamController.ConnectRequest;
 
 public class StreamBuffers {
 
+	/**
+	 * Buffer Header
+	 * =============
+	 * Byte - priority - 0 is highest, 255 is lowest priority
+	 * Byte - receivers stream ID (except in connect request where used to communicate callers stream id)
+	 * Byte - buffer type, CONNECT_REQUEST etc ...
+	 * 
+	 * Connect Request
+	 * ===============
+	 * Header - buffer type set to CONNECT_REQUEST
+	 * Int - stream port being connected to
+	 * 
+	 * Connect Confirm
+	 * ===============
+	 * Header - buffer type set to CONNECT_CONFIRM
+	 * Byte - the stream ID the remote must use when sending data to identify this stream
+	 * 
+	 * Connect Fail
+	 * ============
+	 * Header - buffer type set to CONNECT_FAIL
+	 * Int - error reason code
+	 * 
+	 */
+	
 	public static final byte CONNECT_REQUEST = 1;
 	public static final byte CONNECT_CONFIRM = 2;
 	public static final byte CONNECT_FAIL = 3;
 	public static final byte CLOSE = 4;
 	public static final byte DATA = 5;
 	public static final byte BUFINC = 6;
+	
+	public static int getBufferType(BufferData buffer) {
+		return buffer.get(2);
+	}
 	
 	public static BufferData createConnectRequest(int priority, int localStreamId, int port) {
 		
