@@ -11,15 +11,11 @@ import io.helidon.common.buffers.BufferData;
 
 public class StreamController {
 
-	private static final int NEW_STREAM_QUEUE_DEPTH = 16;
-
-	public static final byte CONNECT_REQUEST = 1;
-	public static final byte CONNECT_CONFIRM = 2;
-	public static final byte CONNECT_FAIL = 3;
-	public static final byte CLOSE = 4;
-	public static final byte DATA = 5;
-	public static final byte BUFINC = 6;
-
+	/**
+	 * The number of queued connect requests that have not been passed to a StreamServer
+	 */
+	private static final int NEW_STREAM_QUEUE_DEPTH = 64;
+	
 	private MessageBroker broker;
 	private Thread messageReaderThread;
 
@@ -102,7 +98,7 @@ public class StreamController {
 
 						if ( listener == null ) {
 							// respond to connect request with connect fail as no listener on port
-							errorCode = 1;
+							errorCode = StreamConstants.NO_LISTENER_ON_STREAM_PORT;
 						} else {
 							// respond with connect confirm
 							int localStreamId = streams.allocNewStreamId();
@@ -120,7 +116,7 @@ public class StreamController {
 							}
 						}
 					} catch (LimitExceededException lee) {
-						errorCode = 2;
+						errorCode = StreamConstants.MAX_STREAMS_EXCEEDED;
 					}
 
 					if ( errorCode != 0 ) 
@@ -180,7 +176,7 @@ public class StreamController {
 					var command = buffer.get(2);
 
 					// must dispatch without blocking
-					if ( command == CONNECT_REQUEST ) {
+					if ( command == StreamBuffers.CONNECT_REQUEST ) {
 						// TODO: log error if too many outstanding connect requests
 						connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
 					} else {

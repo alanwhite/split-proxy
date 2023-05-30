@@ -74,7 +74,7 @@ public class StreamServer {
 		var conn = new ConnectionEntry(new CompletableFuture<Void>(), stream);
 				
 		if ( connections.offer(conn) ) {
-			// connect success
+
 			controller.send(
 					StreamBuffers.createConnectConfirm(
 							stream.getPriority(), 
@@ -84,13 +84,14 @@ public class StreamServer {
 			conn.connected().complete(null);
 			
 			return true;
-		} else {		
-			// connect fail
+			
+		} else {	
+			
 			controller.send(
 					StreamBuffers.createConnectFail(
 							stream.getPriority(), 
 							stream.getRemoteId(), 
-							3));
+							StreamConstants.PENDING_STREAM_PORT_CONNECTIONS_EXCEEDED));
 			
 			return false;
 		}
