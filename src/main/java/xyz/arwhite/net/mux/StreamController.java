@@ -20,7 +20,8 @@ public class StreamController {
 	private Thread messageReaderThread;
 
 	public record ConnectRequest(int priority, int remoteId, int streamPort, BufferData buffer ) {};
-	private record ConnectResponse(int priority, int localId, int remoteId) {};
+	public record ConnectConfirm(int priority, int localId, int remoteId) {};
+	public record ConnectFail(int priority, int localId, int errorCode) {};
 
 	private ArrayBlockingQueue<ConnectRequest> connectRequests = new ArrayBlockingQueue<>(NEW_STREAM_QUEUE_DEPTH);
 	private StreamMap streams;
@@ -100,7 +101,11 @@ public class StreamController {
 							// respond to connect request with connect fail as no listener on port
 							errorCode = StreamConstants.NO_LISTENER_ON_STREAM_PORT;
 						} else {
-							// respond with connect confirm
+							/*
+							 * We are processing a Connect Request received from a remote
+							 * peer. The Connect Request informs us of the peers localID
+							 * which to us is the remoteID for the Stream created.
+							 */
 							int localStreamId = streams.allocNewStreamId();
 
 							// create Stream object for this connection, containing the local and remote streamIds
@@ -180,7 +185,14 @@ public class StreamController {
 						// TODO: log error if too many outstanding connect requests
 						connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
 					} else {
-						// TODO: dispatch to stream
+						var stream = streams.get(StreamBuffers.getStreamId(buffer));
+						if ( stream != null ) {
+							if ( !stream.getPeerIncoming().offer(buffer) ) {
+								// TODO: Log dropping data for backed up stream
+							}
+						} else {
+							// TODO: Log buffer received for non-existant stream
+						}
 					}
 
 				}

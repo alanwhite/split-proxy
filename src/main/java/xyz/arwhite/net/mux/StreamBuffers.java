@@ -4,6 +4,8 @@ import java.nio.ByteBuffer;
 
 import io.helidon.common.buffers.BufferData;
 import xyz.arwhite.net.mux.StreamController.ConnectRequest;
+import xyz.arwhite.net.mux.StreamController.ConnectConfirm;
+import xyz.arwhite.net.mux.StreamController.ConnectFail;
 
 public class StreamBuffers {
 
@@ -34,29 +36,37 @@ public class StreamBuffers {
 	public static final byte CONNECT_REQUEST = 1;
 	public static final byte CONNECT_CONFIRM = 2;
 	public static final byte CONNECT_FAIL = 3;
-	public static final byte CLOSE = 4;
-	public static final byte DATA = 5;
-	public static final byte BUFINC = 6;
+	public static final byte DISCONNECT_REQUEST = 4;
+	public static final byte DISCONNECT_CONFIRM = 5;
+	public static final byte DATA = 6;
+	public static final byte BUFINC = 7;
 	
 	public static int getBufferType(BufferData buffer) {
 		return buffer.get(2);
 	}
 	
+	public static int getStreamId(BufferData buffer) {
+		return buffer.get(1);
+	}
+	
 	public static BufferData createConnectRequest(int priority, int localStreamId, int port) {
 		
-		var buffer = BufferData.create(16);
-		buffer.writeInt8(priority);
-		buffer.writeInt8(localStreamId);
-		buffer.writeInt8(CONNECT_REQUEST);
-		buffer.writeInt16(port);
-		return BufferData.create(16);
+		var connectRequest = BufferData.create(16);
+		connectRequest.writeInt8(priority);
+		connectRequest.writeInt8(localStreamId);
+		connectRequest.writeInt8(CONNECT_REQUEST);
+		connectRequest.writeInt16(port);
+		return connectRequest;
 	}
 	
 	public static ConnectRequest parseConnectRequest(BufferData buffer) {
-		byte[] portBuf = {1,2};
-		buffer.read(portBuf, 3, 2);
 		
-		return new ConnectRequest(buffer.get(0), buffer.get(1), ByteBuffer.wrap(portBuf).getInt(), buffer);
+		var priority = buffer.read();
+		var remoteStreamId = buffer.read();
+		var command = buffer.read();
+		var port = buffer.readInt16();
+		
+		return new ConnectRequest(priority, remoteStreamId, port, buffer);
 	}
 	
 	public static BufferData createConnectConfirm(int priority, int remoteStreamId, int localStreamId) {
@@ -70,6 +80,16 @@ public class StreamBuffers {
 		return connectResponse;
 	}
 	
+	public static ConnectConfirm parseConnectConfirm(BufferData buffer) {
+		
+		var priority = buffer.read();
+		var localStreamId = buffer.read();
+		var command = buffer.read();
+		var remoteStreamId = buffer.read();
+		
+		return new ConnectConfirm(priority, localStreamId, remoteStreamId);
+	}
+	
 	public static BufferData createConnectFail(int priority, int remoteStreamId, int errorCode) {
 		
 		var connectResponse = BufferData.create(5);
@@ -79,5 +99,15 @@ public class StreamBuffers {
 		connectResponse.writeInt16(errorCode);
 		
 		return connectResponse;
+	}
+	
+	public static ConnectFail parseConnectFail(BufferData buffer) {
+		
+		var priority = buffer.read();
+		var localStreamId = buffer.read();
+		var command = buffer.read();
+		var errorCode = buffer.readInt16();
+		
+		return new ConnectFail(priority, localStreamId, errorCode);
 	}
 }
