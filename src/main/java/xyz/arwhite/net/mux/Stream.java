@@ -1,5 +1,7 @@
 package xyz.arwhite.net.mux;
 
+import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.concurrent.ArrayBlockingQueue;
 import io.helidon.common.buffers.BufferData;
 
@@ -48,6 +50,11 @@ public class Stream {
 	 * The relative priority on the WebSocket of messages for this Stream.
 	 */
 	private int priority;
+	
+	/**
+	 * The remote streamPort to which this Stream is connected 
+	 */
+	private int streamPort = -1;
 
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
@@ -86,7 +93,7 @@ public class Stream {
 
 		@Override
 		public void run() {
-			// TODO Auto-generated method stub
+
 			try {
 				while(true) {
 					var buffer = peerIncoming.take();
@@ -105,13 +112,22 @@ public class Stream {
 						 */
 						var cc = StreamBuffers.parseConnectConfirm(buffer);
 						Stream.this.setRemoteId(cc.remoteId());
+						state = StreamState.CONNECTED;
 						
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
-						// nothing more can happen
-						// state is borked
-						// maybe throw an exception?
-						// StreamController needs to know we're done and free the slot
+						/*
+						 * We have received a Connect Fail in response
+						 * to a Connect Request we sent. The connection
+						 * has not been established and the state of 
+						 * this Stream is it is now unusable. We must 
+						 * terminate and inform the StreamController that
+						 * our slot and local id must be freed up.
+						 *
+						 * When we've been freed up we must exit the run loop
+						 */
+						
+						state = StreamState.DISCONNECTED;
 					}
 					
 					case StreamBuffers.DISCONNECT_REQUEST -> {}
@@ -126,6 +142,29 @@ public class Stream {
 		}
 
 	}
+	
+	private void requestConnection(SocketAddress endpoint) throws IOException {
+		
+		if ( !(endpoint instanceof StreamSocketAddress) )
+			throw(new IOException("endpoint must be of type StreamSocketAddress") );
+
+		if ( state != StreamState.UNCONNECTED )
+			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
+		
+		if ( controller != null ) 
+			throw(new IOException("cannot override initial StreamController during connect"));
+
+		if ( streamPort != -1 )
+			throw(new IOException("cannot override already specified stream port"));
+		
+		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
+		streamPort = ssa.getStreamPort();
+		controller = ssa.getStreamController();
+		
+		controller.connect(ssa.getStreamPort());
+		
+	}
+    
 
 	public int getLocalId() {
 		return localId;
@@ -157,6 +196,14 @@ public class Stream {
 
 	public void setPeerIncoming(ArrayBlockingQueue<BufferData> peerIncoming) {
 		this.peerIncoming = peerIncoming;
+	}
+
+	public int getStreamPort() {
+		return streamPort;
+	}
+
+	public void setStreamPort(int streamPort) {
+		this.streamPort = streamPort;
 	}
 
 
