@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.concurrent.ArrayBlockingQueue;
 import io.helidon.common.buffers.BufferData;
-
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Stream {
 
@@ -19,22 +22,22 @@ public class Stream {
 	 *
 	 */
 	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED };
-	
+
 	/**
 	 * The current connection state of this stream
 	 */
 	private StreamState state = StreamState.UNCONNECTED;
-	
+
 	/**
 	 * The StreamController that holds the WebSocket over which Streams are multiplexed
 	 */
 	private StreamController controller;
-	
+
 	/**
 	 * The local identity of this Stream, unique key to the Stream map held in the StreamController
 	 */
 	private int localId;
-	
+
 	/**
 	 * The remote identity the connected peer uses to uniquely identify this Stream. This must be
 	 * provided in every message sent to the peer.
@@ -50,11 +53,13 @@ public class Stream {
 	 * The relative priority on the WebSocket of messages for this Stream.
 	 */
 	private int priority;
-	
+
 	/**
 	 * The remote streamPort to which this Stream is connected 
 	 */
 	private int streamPort = -1;
+
+	private CompletableFuture<Void> connectCompleted = new CompletableFuture<>();
 
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
@@ -113,7 +118,8 @@ public class Stream {
 						var cc = StreamBuffers.parseConnectConfirm(buffer);
 						Stream.this.setRemoteId(cc.remoteId());
 						state = StreamState.CONNECTED;
-						
+						connectCompleted.complete(null);
+
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
 						/*
@@ -126,12 +132,13 @@ public class Stream {
 						 *
 						 * When we've been freed up we must exit the run loop
 						 */
-						
+
 						state = StreamState.DISCONNECTED;
+						connectCompleted.complete(null);
 					}
-					
+
 					case StreamBuffers.DISCONNECT_REQUEST -> {}
-					
+
 
 					}
 				}
@@ -142,29 +149,62 @@ public class Stream {
 		}
 
 	}
-	
+
 	private void requestConnection(SocketAddress endpoint) throws IOException {
-		
+
 		if ( !(endpoint instanceof StreamSocketAddress) )
 			throw(new IOException("endpoint must be of type StreamSocketAddress") );
 
 		if ( state != StreamState.UNCONNECTED )
 			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
-		
-		if ( controller != null ) 
-			throw(new IOException("cannot override initial StreamController during connect"));
 
-		if ( streamPort != -1 )
-			throw(new IOException("cannot override already specified stream port"));
-		
+		//		if ( controller != null ) 
+		//			throw(new IOException("cannot override initial StreamController during connect"));
+		//
+		//		if ( streamPort != -1 )
+		//			throw(new IOException("cannot override already specified stream port"));
+
+
+
 		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
 		streamPort = ssa.getStreamPort();
 		controller = ssa.getStreamController();
-		
-		controller.connect(ssa.getStreamPort());
-		
+
+		state = StreamState.CONNECTING;
+		controller.connect(streamPort);
+
+
 	}
-    
+
+	public void connect(SocketAddress endpoint) throws IOException {
+		this.requestConnection(endpoint);
+		try {
+			connectCompleted.get();
+			if ( state != StreamState.CONNECTED )
+				throw(new IOException("error connecting Stream"));
+			
+		} catch (InterruptedException | ExecutionException e) {
+			throw(new IOException("error connecting Stream",e));
+		}
+	}
+
+	public void connect(SocketAddress endpoint, int timeout) throws IOException {
+
+		if ( timeout == 0 ) 
+			this.connect(endpoint);
+		else {
+			try {
+				connectCompleted.orTimeout(timeout, TimeUnit.MILLISECONDS).get();
+				if ( state != StreamState.CONNECTED )
+					throw(new IOException("error connecting Stream"));
+			
+			} catch (InterruptedException e) {
+				throw(new IOException("interrupted waiting for connection",e));
+			} catch (ExecutionException e) {
+				throw(new IOException("error executing connection",e));
+			}
+		}
+	}
 
 	public int getLocalId() {
 		return localId;
