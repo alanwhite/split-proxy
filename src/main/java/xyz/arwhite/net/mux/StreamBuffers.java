@@ -1,11 +1,9 @@
 package xyz.arwhite.net.mux;
 
-import java.nio.ByteBuffer;
-
 import io.helidon.common.buffers.BufferData;
-import xyz.arwhite.net.mux.StreamController.ConnectRequest;
 import xyz.arwhite.net.mux.StreamController.ConnectConfirm;
 import xyz.arwhite.net.mux.StreamController.ConnectFail;
+import xyz.arwhite.net.mux.StreamController.ConnectRequest;
 
 public class StreamBuffers {
 
@@ -65,6 +63,7 @@ public class StreamBuffers {
 		var remoteStreamId = buffer.read();
 		var command = buffer.read();
 		var port = buffer.readInt16();
+		buffer.rewind();
 		
 		return new ConnectRequest(priority, remoteStreamId, port, buffer);
 	}
@@ -86,6 +85,7 @@ public class StreamBuffers {
 		var localStreamId = buffer.read();
 		var command = buffer.read();
 		var remoteStreamId = buffer.read();
+		buffer.rewind();
 		
 		return new ConnectConfirm(priority, localStreamId, remoteStreamId);
 	}
@@ -107,6 +107,7 @@ public class StreamBuffers {
 		var localStreamId = buffer.read();
 		var command = buffer.read();
 		var errorCode = buffer.readInt16();
+		buffer.rewind();
 		
 		return new ConnectFail(priority, localStreamId, errorCode);
 	}
