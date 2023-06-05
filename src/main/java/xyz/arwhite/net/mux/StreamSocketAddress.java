@@ -8,6 +8,13 @@ public class StreamSocketAddress extends SocketAddress {
 	private StreamController streamController;
 	private int streamPort;
 	
+	/**
+	 * Identifies a stream port on a StreamController that has a connected
+	 * multiplexed WebSocket
+	 * 
+	 * @param streamController
+	 * @param streamPort
+	 */
 	public StreamSocketAddress(StreamController streamController, int streamPort) {
 		
 		this.setStreamController(streamController);

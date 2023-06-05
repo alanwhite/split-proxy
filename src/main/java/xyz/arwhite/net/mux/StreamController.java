@@ -65,6 +65,20 @@ public class StreamController {
 	public boolean deregisterStreamServer(int port) {
 		return streamPorts.remove(port) != null;
 	}
+	
+	protected int registerStream(Stream stream) throws LimitExceededException, IllegalArgumentException {
+		
+		int localStreamId = streams.allocNewStreamId();
+
+		// add entry to Streams map 
+		streams.put(Integer.valueOf(localStreamId), stream); 
+		
+		return localStreamId;
+	}
+	
+	protected boolean deregisterStream(int stream) {
+		return streams.remove(stream) != null;
+	}
 
 	private void setupConnectDispatcher(ArrayBlockingQueue<ConnectRequest> connectRequests) {
 		Thread.ofVirtual().start(
@@ -208,41 +222,6 @@ public class StreamController {
 
 	public boolean send(BufferData buffer) {
 		return broker.sendMessage(buffer);
-	}
-	
-	/**
-	 * Creates a new stream across the WebSocket
-	 * Specify required priority
-	 * 
-	 * @return
-	 * @throws IOException
-	 */
-	public Stream connect(int port) throws IOException {
-
-		// create a stream object, file it with local id
-		try {
-			int localStreamId = streams.allocNewStreamId();
-			int priority = 64;
-
-			// create Stream object for this connection, containing the local and remote streamIds
-			// TODO: make priority specifiable
-			var stream = new Stream(this, localStreamId, 0, priority); 
-
-			// add entry to Streams map 
-			streams.put(Integer.valueOf(localStreamId), stream); 
-
-			// send connect request
-			broker.sendMessage(StreamBuffers.createConnectRequest(priority, localStreamId, port));
-			
-		} catch (LimitExceededException | IllegalArgumentException e) {
-			throw new IOException(e);
-		}
-
-		// get remote id from CC, update stream
-
-		/// CC recvd over ws msg queue for this Stream, self-updates the stream object
-
-		return null;
 	}
 
 }

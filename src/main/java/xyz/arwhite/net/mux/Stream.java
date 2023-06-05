@@ -2,26 +2,33 @@ package xyz.arwhite.net.mux;
 
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.ArrayBlockingQueue;
 import io.helidon.common.buffers.BufferData;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import javax.naming.LimitExceededException;
 
 public class Stream {
 
 	/**
+	 * A Stream object can only be used once. It must be removed from the StreamController
+	 * as soon as it's known to be of no further use.
+	 * 
 	 * Known states of a Stream:
 	 * UNCONNECTED: This stream has never attempted a connect
 	 * CONNECTING: This stream has received, or issued a connect request and awaits a connect confirm
 	 * CONNECTED: This stream is connected and data can flow in either direction
-	 * DISCONNECTING: This stream has issued a disconnect request and awaits a disconnect confirm
-	 * DISCONNECTED: This stream has received a disconnect request or received a disconnect request
+	 * CLOSED: This stream has closed
+	 * ERROR: This stream is in an error state and is unusable
+	 * 
 	 * @author Alan R. White
 	 *
 	 */
-	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED };
+	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, CLOSED, ERROR };
 
 	/**
 	 * The current connection state of this stream
@@ -31,7 +38,7 @@ public class Stream {
 	/**
 	 * The StreamController that holds the WebSocket over which Streams are multiplexed
 	 */
-	private StreamController controller;
+	private StreamController streamController;
 
 	/**
 	 * The local identity of this Stream, unique key to the Stream map held in the StreamController
@@ -59,7 +66,10 @@ public class Stream {
 	 */
 	private int streamPort = -1;
 
-	private CompletableFuture<Void> connectCompleted = new CompletableFuture<>();
+	/**
+	 * Completed by the receiver thread 
+	 */
+	private CompletableFuture<Integer> connectCompleted = new CompletableFuture<>();
 
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
@@ -75,13 +85,25 @@ public class Stream {
 	 * @param priority
 	 */
 	public Stream(StreamController controller, int localId, int remoteId, int priority) {
+		this.setStreamController(controller);
 		this.setLocalId(localId);
 		this.setRemoteId(remoteId);
 		this.setPriority(priority);
 
 		// Set up consumer thread for peerIncoming
-		setupIncoming(peerIncoming);
+		// setupIncoming(peerIncoming);
 	}
+
+	public Stream(StreamController controller) throws LimitExceededException, IllegalArgumentException {
+		this.setStreamController(controller);
+
+		this.setLocalId(streamController.registerStream(this));
+	}
+
+	/**
+	 * Plain constructor, all properties must be set individually
+	 */
+	public Stream() {};
 
 	private void setupIncoming(ArrayBlockingQueue<BufferData> peerIncoming) {
 		Thread.ofVirtual().start(
@@ -98,7 +120,6 @@ public class Stream {
 
 		@Override
 		public void run() {
-
 			try {
 				while(true) {
 					var buffer = peerIncoming.take();
@@ -108,6 +129,19 @@ public class Stream {
 					switch( command ) {
 					case StreamBuffers.CONNECT_CONFIRM -> {
 						/*
+						 * If we receive a Connect Confirm while not in a state
+						 * where we're waiting for one this is a sequence error
+						 * of some form. Only viable action is to terminate the 
+						 * Stream. 
+						 */
+						if ( state != StreamState.CONNECTING ) {
+							streamController.deregisterStream(localId);
+							state = StreamState.ERROR;
+							connectCompleted.complete(StreamConstants.UNEXPECTED_CONNECT_CONFIRM);
+							throw(new IllegalStateException("Invalid state change UC to CC"));
+						}
+
+						/*
 						 * We have received a Connect Confirm in response
 						 * to a Connect Request we sent. When we sent it
 						 * we told the peer what our localID is, and in 
@@ -115,10 +149,11 @@ public class Stream {
 						 * us, is it's remoteID we must provide whenever we 
 						 * send data to it.
 						 */
+
 						var cc = StreamBuffers.parseConnectConfirm(buffer);
 						Stream.this.setRemoteId(cc.remoteId());
 						state = StreamState.CONNECTED;
-						connectCompleted.complete(null);
+						connectCompleted.complete(0);
 
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
@@ -133,24 +168,35 @@ public class Stream {
 						 * When we've been freed up we must exit the run loop
 						 */
 
-						state = StreamState.DISCONNECTED;
-						connectCompleted.complete(null);
+						streamController.deregisterStream(localId);
+						state = StreamState.CLOSED;
+						connectCompleted.complete(0);
 					}
 
-					case StreamBuffers.DISCONNECT_REQUEST -> {}
+					case StreamBuffers.DISCONNECT_REQUEST -> {
+						/*
+						 * 
+						 */
+						streamController.deregisterStream(localId);
+						state = StreamState.CLOSED;	
+					}
+
 
 
 					}
 				}
-			}
-			catch(InterruptedException e) {
+			} catch(InterruptedException e) {
 
+			} catch(IllegalStateException e) {
+				// throw(new IOException(e));
+				// need to tell the Stream to die .....
 			}
 		}
 
 	}
 
-	private void requestConnection(SocketAddress endpoint) throws IOException {
+	public void connect(SocketAddress endpoint, int timeout) 
+			throws IOException, LimitExceededException {
 
 		if ( !(endpoint instanceof StreamSocketAddress) )
 			throw(new IOException("endpoint must be of type StreamSocketAddress") );
@@ -158,52 +204,50 @@ public class Stream {
 		if ( state != StreamState.UNCONNECTED )
 			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
 
-		//		if ( controller != null ) 
-		//			throw(new IOException("cannot override initial StreamController during connect"));
-		//
-		//		if ( streamPort != -1 )
-		//			throw(new IOException("cannot override already specified stream port"));
-
-
-
 		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
 		streamPort = ssa.getStreamPort();
-		controller = ssa.getStreamController();
+		streamController = ssa.getStreamController();
 
-		state = StreamState.CONNECTING;
-		controller.connect(streamPort);
-
-
-	}
-
-	public void connect(SocketAddress endpoint) throws IOException {
-		this.requestConnection(endpoint);
 		try {
-			connectCompleted.get();
-			if ( state != StreamState.CONNECTED )
+			this.localId = streamController.registerStream(this);
+
+			state = StreamState.CONNECTING;
+
+			// become able to receive any responses 
+			setupIncoming(peerIncoming);
+
+			streamController.send(StreamBuffers.createConnectRequest(priority, this.getLocalId(), streamPort));
+
+			int result = -1;
+
+			if ( timeout > 0 ) 
+				result = connectCompleted.get(timeout, TimeUnit.MILLISECONDS);
+			else
+				result = connectCompleted.get();
+			
+			if ( result != 0 || state != StreamState.CONNECTED )
 				throw(new IOException("error connecting Stream"));
 			
+
 		} catch (InterruptedException | ExecutionException e) {
-			throw(new IOException("error connecting Stream",e));
+			streamController.deregisterStream(localId);
+			throw(new IOException("error connecting stream",e));
+		} catch (TimeoutException e) {
+			streamController.deregisterStream(localId);
+			throw(new SocketTimeoutException());
+		} catch (LimitExceededException e) {
+			streamController.deregisterStream(localId);
+			throw(new IOException("stream limit reached",e));
 		}
 	}
 
-	public void connect(SocketAddress endpoint, int timeout) throws IOException {
+	public void connect(SocketAddress endpoint) throws IOException, LimitExceededException {
+		connect(endpoint, 0);
+	}
 
-		if ( timeout == 0 ) 
-			this.connect(endpoint);
-		else {
-			try {
-				connectCompleted.orTimeout(timeout, TimeUnit.MILLISECONDS).get();
-				if ( state != StreamState.CONNECTED )
-					throw(new IOException("error connecting Stream"));
-			
-			} catch (InterruptedException e) {
-				throw(new IOException("interrupted waiting for connection",e));
-			} catch (ExecutionException e) {
-				throw(new IOException("error executing connection",e));
-			}
-		}
+	private void log(String text) {
+		System.out.println(Thread.currentThread().isVirtual()+
+				":"+Thread.currentThread().threadId()+":"+text);
 	}
 
 	public int getLocalId() {
@@ -244,6 +288,14 @@ public class Stream {
 
 	public void setStreamPort(int streamPort) {
 		this.streamPort = streamPort;
+	}
+
+	public StreamController getStreamController() {
+		return streamController;
+	}
+
+	public void setStreamController(StreamController streamController) {
+		this.streamController = streamController;
 	}
 
 

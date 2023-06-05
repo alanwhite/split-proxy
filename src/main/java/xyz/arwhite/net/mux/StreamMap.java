@@ -34,9 +34,9 @@ public class StreamMap extends ConcurrentHashMap<Integer, Stream> {
 	 * Find an unused entry in the map
 	 * @return
 	 * @throws IOException
-	 * @throws LimitExceededException 
+	 * @throws LimitExceededException if max concurrent streams reached
 	 */
-	public int allocNewStreamId() throws LimitExceededException, IllegalArgumentException {
+	public int allocNewStreamId() throws LimitExceededException {
 		int localStreamId = -1;
 
 		slotLock.lock();

@@ -35,7 +35,6 @@ public class StreamBuffers {
 	public static final byte CONNECT_CONFIRM = 2;
 	public static final byte CONNECT_FAIL = 3;
 	public static final byte DISCONNECT_REQUEST = 4;
-	public static final byte DISCONNECT_CONFIRM = 5;
 	public static final byte DATA = 6;
 	public static final byte BUFINC = 7;
 	
