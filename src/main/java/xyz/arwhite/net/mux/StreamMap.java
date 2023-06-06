@@ -33,7 +33,6 @@ public class StreamMap extends ConcurrentHashMap<Integer, Stream> {
 	/**
 	 * Find an unused entry in the map
 	 * @return
-	 * @throws IOException
 	 * @throws LimitExceededException if max concurrent streams reached
 	 */
 	public int allocNewStreamId() throws LimitExceededException {
@@ -54,7 +53,7 @@ public class StreamMap extends ConcurrentHashMap<Integer, Stream> {
 		
 	}
 	
-	public void freeStreamId(int streamId) throws IOException {
+	public void freeStreamId(int streamId) throws IllegalArgumentException {
 
 		if ( streamId >= MAX_STREAMS ) 
 			throw (new IllegalArgumentException("stream id exceeds limit"));

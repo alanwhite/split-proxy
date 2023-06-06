@@ -66,7 +66,7 @@ public class StreamController {
 		return streamPorts.remove(port) != null;
 	}
 	
-	protected int registerStream(Stream stream) throws LimitExceededException, IllegalArgumentException {
+	protected int registerStream(Stream stream) throws LimitExceededException {
 		
 		int localStreamId = streams.allocNewStreamId();
 
@@ -77,7 +77,12 @@ public class StreamController {
 	}
 	
 	protected boolean deregisterStream(int stream) {
-		return streams.remove(stream) != null;
+		
+		var result = streams.remove(stream) != null;
+		if ( result )
+			streams.freeStreamId(stream);
+		
+		return result;
 	}
 
 	private void setupConnectDispatcher(ArrayBlockingQueue<ConnectRequest> connectRequests) {

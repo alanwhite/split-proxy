@@ -15,6 +15,11 @@ import javax.naming.LimitExceededException;
 public class Stream {
 
 	/**
+	 * Default timeout on stream
+	 */
+	private static final long DEFAULT_TIMEOUT = 1000 * 60; 
+	
+	/**
 	 * A Stream object can only be used once. It must be removed from the StreamController
 	 * as soon as it's known to be of no further use.
 	 * 
@@ -72,6 +77,11 @@ public class Stream {
 	private CompletableFuture<Integer> connectCompleted = new CompletableFuture<>();
 
 	/**
+	 * Terminate stream if no activity for the streamTimeout value 
+	 */
+	private long streamTimeout = DEFAULT_TIMEOUT;
+	
+	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
 	 * to connect a Stream across the WebSocket, or receiving a connect request from the peer.
 	 * 
@@ -94,7 +104,7 @@ public class Stream {
 		// setupIncoming(peerIncoming);
 	}
 
-	public Stream(StreamController controller) throws LimitExceededException, IllegalArgumentException {
+	public Stream(StreamController controller) throws LimitExceededException {
 		this.setStreamController(controller);
 
 		this.setLocalId(streamController.registerStream(this));
@@ -195,6 +205,14 @@ public class Stream {
 
 	}
 
+	/**
+	 * Connects this stream to the provided endpoint.
+	 * 
+	 * @param endpoint
+	 * @param timeout overrides the default stream timeout during connection
+	 * @throws IOException
+	 * @throws LimitExceededException
+	 */
 	public void connect(SocketAddress endpoint, int timeout) 
 			throws IOException, LimitExceededException {
 
@@ -218,16 +236,11 @@ public class Stream {
 
 			streamController.send(StreamBuffers.createConnectRequest(priority, this.getLocalId(), streamPort));
 
-			int result = -1;
-
-			if ( timeout > 0 ) 
-				result = connectCompleted.get(timeout, TimeUnit.MILLISECONDS);
-			else
-				result = connectCompleted.get();
+			int result = connectCompleted.get(
+					timeout > 0 ? timeout : getStreamTimeout(), TimeUnit.MILLISECONDS);
 			
 			if ( result != 0 || state != StreamState.CONNECTED )
 				throw(new IOException("error connecting Stream"));
-			
 
 		} catch (InterruptedException | ExecutionException e) {
 			streamController.deregisterStream(localId);
@@ -243,6 +256,24 @@ public class Stream {
 
 	public void connect(SocketAddress endpoint) throws IOException, LimitExceededException {
 		connect(endpoint, 0);
+	}
+	
+	/**
+	 * Closes this stream
+	 */
+	public void close() {
+		// send a disconnect request message
+		// await a disconnect confirm or timeout
+		state = StreamState.CLOSED;
+	}
+	
+	/**
+	 * Returns the closed state of the Stream
+	 * ß
+	 * @return true if the Stream has been closed
+	 */
+	public boolean isClosed() {
+		return state == StreamState.CLOSED || state == StreamState.ERROR;
 	}
 
 	private void log(String text) {
@@ -296,6 +327,14 @@ public class Stream {
 
 	public void setStreamController(StreamController streamController) {
 		this.streamController = streamController;
+	}
+
+	public long getStreamTimeout() {
+		return streamTimeout;
+	}
+
+	public void setStreamTimeout(long streamTimeout) {
+		this.streamTimeout = streamTimeout;
 	}
 
 
