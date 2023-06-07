@@ -27,13 +27,14 @@ public class Stream {
 	 * UNCONNECTED: This stream has never attempted a connect
 	 * CONNECTING: This stream has received, or issued a connect request and awaits a connect confirm
 	 * CONNECTED: This stream is connected and data can flow in either direction
+	 * CLOSING: This stream has sent a disconnect request and not yet receive a confirm
 	 * CLOSED: This stream has closed
 	 * ERROR: This stream is in an error state and is unusable
 	 * 
 	 * @author Alan R. White
 	 *
 	 */
-	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, CLOSED, ERROR };
+	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, CLOSING, CLOSED, ERROR };
 
 	/**
 	 * The current connection state of this stream
@@ -72,9 +73,10 @@ public class Stream {
 	private int streamPort = -1;
 
 	/**
-	 * Completed by the receiver thread 
+	 * Completion signals by the receiver thread 
 	 */
 	private CompletableFuture<Integer> connectCompleted = new CompletableFuture<>();
+	private CompletableFuture<Integer> disconnectCompleted = new CompletableFuture<>();
 
 	/**
 	 * Terminate stream if no activity for the streamTimeout value 
@@ -115,7 +117,7 @@ public class Stream {
 	 */
 	public Stream() {};
 
-	private void setupIncoming(ArrayBlockingQueue<BufferData> peerIncoming) {
+	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
 		Thread.ofVirtual().start(
 				new Incoming(peerIncoming));
 	}
@@ -131,11 +133,12 @@ public class Stream {
 		@Override
 		public void run() {
 			try {
-				while(true) {
+				boolean halt_receiver = false;
+				while(!halt_receiver) {
 					var buffer = peerIncoming.take();
 
 					var command = StreamBuffers.getBufferType(buffer);
-
+					
 					switch( command ) {
 					case StreamBuffers.CONNECT_CONFIRM -> {
 						/*
@@ -185,28 +188,60 @@ public class Stream {
 
 					case StreamBuffers.DISCONNECT_REQUEST -> {
 						/*
-						 * 
+						 * Need to shut down and send confirm
+						 */
+						state = StreamState.CLOSED;
+						
+						streamController.send(
+								StreamBuffers.createDisconnectRequest(priority, remoteId));
+						
+						streamController.deregisterStream(localId);
+						
+						halt_receiver = true;
+						
+					}
+
+					case StreamBuffers.DISCONNECT_CONFIRM -> {
+						/*
+						 * If we receive a Disconnect Confirm while not in a state
+						 * where we're waiting for one this is a sequence error
+						 * of some form. Only viable action is to terminate the 
+						 * Stream. 
+						 */
+						if ( state != StreamState.CLOSING ) {
+							streamController.deregisterStream(localId);
+							state = StreamState.ERROR;
+							disconnectCompleted.complete(StreamConstants.UNEXPECTED_DISCONNECT_CONFIRM);
+							throw(new IllegalStateException("Invalid state change DC and not Closing"));
+						}
+						
+						/*
+						 * We have received a Disconnect Confirmation so we can tidily
+						 * close down.
 						 */
 						streamController.deregisterStream(localId);
 						state = StreamState.CLOSED;	
+						disconnectCompleted.complete(0);
+						
+						halt_receiver = true;
 					}
 
-
-
-					}
-				}
-			} catch(InterruptedException e) {
-
-			} catch(IllegalStateException e) {
-				// throw(new IOException(e));
-				// need to tell the Stream to die .....
-			}
+					} // switch
+				} // while
+				
+				log("peerIncoming receiver tidily closed");
+				
+			} catch(InterruptedException | IllegalStateException e) {
+				streamController.deregisterStream(localId);
+				state = StreamState.ERROR;
+			} 
 		}
 
 	}
 
 	/**
-	 * Connects this stream to the provided endpoint.
+	 * Connects this stream to the provided endpoint. Blocks calling thread until
+	 * connection completes or times out.
 	 * 
 	 * @param endpoint
 	 * @param timeout overrides the default stream timeout during connection
@@ -232,7 +267,7 @@ public class Stream {
 			state = StreamState.CONNECTING;
 
 			// become able to receive any responses 
-			setupIncoming(peerIncoming);
+			startReceiver(peerIncoming);
 
 			streamController.send(StreamBuffers.createConnectRequest(priority, this.getLocalId(), streamPort));
 
@@ -242,13 +277,17 @@ public class Stream {
 			if ( result != 0 || state != StreamState.CONNECTED )
 				throw(new IOException("error connecting Stream"));
 
-		} catch (InterruptedException | ExecutionException e) {
+		} catch (InterruptedException | ExecutionException | TimeoutException e) {
+			state = StreamState.ERROR;
 			streamController.deregisterStream(localId);
+			
+			if ( e instanceof TimeoutException)
+				throw(new SocketTimeoutException());
+			
 			throw(new IOException("error connecting stream",e));
-		} catch (TimeoutException e) {
-			streamController.deregisterStream(localId);
-			throw(new SocketTimeoutException());
+
 		} catch (LimitExceededException e) {
+			state = StreamState.ERROR;
 			streamController.deregisterStream(localId);
 			throw(new IOException("stream limit reached",e));
 		}
@@ -259,24 +298,46 @@ public class Stream {
 	}
 	
 	/**
-	 * Closes this stream
+	 * Closes this stream. Blocks the calling thread until the operation completes
+	 * or times out.
+	 * 
+	 * @throws IOException 
 	 */
-	public void close() {
+	public void close() throws IOException {
 		// send a disconnect request message
 		// await a disconnect confirm or timeout
-		state = StreamState.CLOSED;
+		state = StreamState.CLOSING;
+		
+		streamController.send(
+				StreamBuffers.createDisconnectRequest(priority, remoteId));
+		
+		try {
+			int result = disconnectCompleted.get(getStreamTimeout(), TimeUnit.MILLISECONDS);
+			
+			if ( result != 0 || state != StreamState.CLOSED )
+				throw(new IOException("error disconnecting Stream "+state.toString()));
+			
+		} catch (InterruptedException | ExecutionException | TimeoutException e) {
+			state = StreamState.ERROR;
+			streamController.deregisterStream(localId);
+			
+			if ( e instanceof TimeoutException) 
+				throw(new SocketTimeoutException());
+			
+			throw(new IOException("error disconnecting stream",e));
+		}
 	}
 	
 	/**
 	 * Returns the closed state of the Stream
-	 * ß
+	 * 
 	 * @return true if the Stream has been closed
 	 */
 	public boolean isClosed() {
-		return state == StreamState.CLOSED || state == StreamState.ERROR;
+		return state == StreamState.CLOSED || state == StreamState.CLOSING || state == StreamState.ERROR;
 	}
 
-	private void log(String text) {
+	private static void log(String text) {
 		System.out.println(Thread.currentThread().isVirtual()+
 				":"+Thread.currentThread().threadId()+":"+text);
 	}

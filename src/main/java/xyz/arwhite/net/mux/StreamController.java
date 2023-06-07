@@ -22,6 +22,9 @@ public class StreamController {
 	public record ConnectRequest(int priority, int remoteId, int streamPort, BufferData buffer ) {};
 	public record ConnectConfirm(int priority, int localId, int remoteId) {};
 	public record ConnectFail(int priority, int localId, int errorCode) {};
+	public record DisconnectRequest(int priority, int localId) {};
+	public record DisconnectConfirm(int priority, int localId, int errorCode) {};
+	
 
 	private ArrayBlockingQueue<ConnectRequest> connectRequests = new ArrayBlockingQueue<>(NEW_STREAM_QUEUE_DEPTH);
 	private StreamMap streams;

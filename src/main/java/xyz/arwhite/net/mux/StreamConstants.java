@@ -11,4 +11,5 @@ public class StreamConstants {
 	
 	// Error reason raised in a Stream
 	public static final int UNEXPECTED_CONNECT_CONFIRM = 3001;
+	public static final int UNEXPECTED_DISCONNECT_CONFIRM = 3002;
 }
