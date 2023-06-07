@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.naming.LimitExceededException;
 
@@ -39,7 +40,7 @@ public class Stream {
 	/**
 	 * The current connection state of this stream
 	 */
-	private StreamState state = StreamState.UNCONNECTED;
+	private volatile StreamState state = StreamState.UNCONNECTED;
 
 	/**
 	 * The StreamController that holds the WebSocket over which Streams are multiplexed
@@ -97,25 +98,29 @@ public class Stream {
 	 * @param priority
 	 */
 	public Stream(StreamController controller, int localId, int remoteId, int priority) {
-		this.setStreamController(controller);
-		this.setLocalId(localId);
-		this.setRemoteId(remoteId);
-		this.setPriority(priority);
-
+		this();
+		setStreamController(controller);
+		setLocalId(localId);
+		setRemoteId(remoteId);
+		setPriority(priority);
+		
 		// Set up consumer thread for peerIncoming
 		// setupIncoming(peerIncoming);
+		// maybe needed for when invoked from a listen / accept
 	}
 
 	public Stream(StreamController controller) throws LimitExceededException {
-		this.setStreamController(controller);
-
-		this.setLocalId(streamController.registerStream(this));
+		this();
+		setStreamController(controller);
+		setLocalId(streamController.registerStream(this));
 	}
 
 	/**
 	 * Plain constructor, all properties must be set individually
 	 */
-	public Stream() {};
+	public Stream() {
+		// state.set(StreamState.UNCONNECTED);
+	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
 		Thread.ofVirtual().start(
@@ -140,6 +145,7 @@ public class Stream {
 					var command = StreamBuffers.getBufferType(buffer);
 					
 					switch( command ) {
+					// what about connect requests .....
 					case StreamBuffers.CONNECT_CONFIRM -> {
 						/*
 						 * If we receive a Connect Confirm while not in a state
@@ -193,7 +199,7 @@ public class Stream {
 						state = StreamState.CLOSED;
 						
 						streamController.send(
-								StreamBuffers.createDisconnectRequest(priority, remoteId));
+								StreamBuffers.createDisconnectConfirm(priority, remoteId));
 						
 						streamController.deregisterStream(localId);
 						
