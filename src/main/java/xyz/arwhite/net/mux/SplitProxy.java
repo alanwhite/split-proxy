@@ -63,4 +63,80 @@ public class SplitProxy {
 		// the thread then loops on the accept method of the stream server object which suspends until a stream request comes in
 	}
 
+	/*
+	 * Buffers....
+	 * 
+	 * We have a thread in the Stream object that receives data send from a remote peer
+	 * We have a local app that is reading from the Stream via an InputStream.
+	 * 
+	 * So the Stream is writing data to a buffer, and an implementation of InputStream is reading 
+	 * from it when requested to do so.
+	 * 
+	 * The buffer is not thread-safe, there can be no read operations while it's being written to
+	 * and similarly it cannot be read while being written to.
+	 * 
+	 * When a buffer is compacted to be set back to write mode it adds write capacity to the buffer
+	 * When a buffer is flipped to read mode, nothing can be written to it.
+	 * 
+	 * So we need to lock the buffer, and understand when we acquire the lock, what mode a buffer is in
+	 * No class provides this synchronized state tracking for a byte buffer. We need to build it.
+	 * 
+	 * We could use channels I expected however we're trying to avoid async coding patterns as
+	 * we're liberated from those by virtual threads.
+	 * 
+	 * Was thinking about how virtual threads liberate us from the complexity of asynchronous
+	 * code patterns in Java. Virtual threads are cheap so we can spawn them and block them as
+	 * needed.
+	 * 
+	 * Often we need to transfer data via bytebuffers, which are clearly marked as not thread-safe
+	 * so they don't synchronize operations on the encapsulated data.
+	 * Also we need to track the state of the bytebuffer, is it in a state suitable for appending 
+	 * new data, or do we need to compact it back before doing so? Is it in a state to read more
+	 * data from or do we need to flip it before reading?
+	 * 
+	 * These operations need to be synchronized we can't have the reader and write operating on
+	 * the buffer at the same time. In the virtual thread world reentrant locks are recommended
+	 * (REFERENCE) and provide benefit x,y,z.
+	 * 
+	 * Utility class to provide such a synchronized transit buffer.
+	 * 
+	 * We need our read methods on the InputStream to block until data is available.
+	 * Our options for this are potentially a future, or a blocking queue.
+	 * If we're using a blocking queue, what's the deal with the bytebuffer ...
+	 * 
+	 * Maybe we signal on the blocking queue that a write has happened, if there's
+	 * multiple writes before a reader comes along then if they consume all data
+	 * when taking the first off the queue then subsequent takes will result in
+	 * zero reads.
+	 * 
+	 * Maybe it's a condition on a reentrant lock ... need to look at those.
+	 * 
+	 * So the reader acquires the reentrant lock, discovers there's no data so
+	 * waits on a condition. When a writer adds data to the buffer, they signal
+	 * data has been added.
+	 * 
+	 * Not sure why this then can't be a queue ... I guess we're trying to pool
+	 * the data so one read could consume all the data from multiple writes.
+	 * 
+	 * Streams peer incoming readers are already on own threads, so blocking
+	 * won't be an issue for them.
+	 * 
+	 * Some trial and error needed here, maybe the sync'd state tracked buffers
+	 * aren't needed? Can we have a mechanism where we can apply flow control 
+	 * back, ie don't send any more data, I've got nowhere to put it.
+	 * 
+	 * The buffer class could send buffer control messages back via the stream
+	 * when it's read and compacted ready for writes, remote end knows the
+	 * buffer size, so only sends until it knows it's full. Occasionally it 
+	 * will receive a buffer control message saying x more bytes can be sent.
+	 * 
+	 * Maybe expose an AtomicInteger that can be used by available() to read
+	 * to see how much data is waiting to be read. Writers and readers would
+	 * need to add / subtract from it.
+	 * 
+	 * Might better for available to lock the buffer and return the readable
+	 * data.
+	 * 
+	 */
+	
 }

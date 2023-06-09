@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.concurrent.ArrayBlockingQueue;
-import io.helidon.common.buffers.BufferData;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 import javax.naming.LimitExceededException;
+
+import io.helidon.common.buffers.BufferData;
 
 public class Stream {
 
@@ -38,7 +38,8 @@ public class Stream {
 	public enum StreamState { UNCONNECTED, CONNECTING, CONNECTED, CLOSING, CLOSED, ERROR };
 
 	/**
-	 * The current connection state of this stream
+	 * The current connection state of this stream. Enums are thread-safe, volatile
+	 * ensures all threads receive updates made by other threads.
 	 */
 	private volatile StreamState state = StreamState.UNCONNECTED;
 
