@@ -1,6 +1,7 @@
 package xyz.arwhite.net.mux;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -85,6 +86,8 @@ public class Stream {
 	 */
 	private long streamTimeout = DEFAULT_TIMEOUT;
 	
+	private StreamInputStream inputStream = new StreamInputStream(4096);
+	
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
 	 * to connect a Stream across the WebSocket, or receiving a connect request from the peer.
@@ -117,10 +120,32 @@ public class Stream {
 	}
 
 	/**
-	 * Plain constructor, all properties must be set individually
+	 * Plain constructor, all properties must be set individually.
+	 * 
+	 * Launches a thread to propagate notification of data read from the inputstream by the 
+	 * consumer of this Stream.
 	 */
 	public Stream() {
-		// state.set(StreamState.UNCONNECTED);
+		
+		// TODO: test buffer increment flow
+		Thread.ofVirtual().start(() -> {
+			var q = inputStream.getFreeNotificationQueue();
+			
+			boolean completed = false;
+			while( !completed ) {
+				try {
+					var freedBytes = q.take();
+					
+					streamController.send(
+							StreamBuffers.createBufferIncrement(priority, remoteId, freedBytes));
+					
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+					completed = true;
+				}
+			}
+		});
+
 	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
@@ -231,6 +256,26 @@ public class Stream {
 						disconnectCompleted.complete(0);
 						
 						halt_receiver = true;
+					}
+					
+					case StreamBuffers.BUFFER_INCREMENT -> {
+						/* 
+						 * Should only receive these if the stream is established
+						 */
+						if ( state != StreamState.CONNECTED ) {
+							streamController.deregisterStream(localId);
+							state = StreamState.ERROR;
+							disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
+							throw(new IllegalStateException("Invalid state change DC and not Closing"));
+						}
+						
+						/*
+						 * We can increment the amount of data the remote is prepared to receive
+						 */
+						
+						// ok well we have to update the quote but then what
+						// maybe there's data waiting to be written to the other
+						// end. Let's go implement the outputstream and we'll see how this goes ....
 					}
 
 					} // switch
@@ -403,6 +448,10 @@ public class Stream {
 
 	public void setStreamTimeout(long streamTimeout) {
 		this.streamTimeout = streamTimeout;
+	}
+
+	public InputStream getInputStream() {
+		return inputStream;
 	}
 
 

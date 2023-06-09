@@ -1,6 +1,7 @@
 package xyz.arwhite.net.mux;
 
 import io.helidon.common.buffers.BufferData;
+import xyz.arwhite.net.mux.StreamController.BufferIncrement;
 import xyz.arwhite.net.mux.StreamController.ConnectConfirm;
 import xyz.arwhite.net.mux.StreamController.ConnectFail;
 import xyz.arwhite.net.mux.StreamController.ConnectRequest;
@@ -37,7 +38,7 @@ public class StreamBuffers {
 	public static final byte DISCONNECT_REQUEST = 4;
 	public static final byte DISCONNECT_CONFIRM = 5;
 	public static final byte DATA = 6;
-	public static final byte BUFINC = 7;
+	public static final byte BUFFER_INCREMENT = 7;
 
 	public static int getBufferType(BufferData buffer) {
 		return buffer.get(2);
@@ -128,5 +129,26 @@ public class StreamBuffers {
 		disconnectConfirm.writeInt8(remoteStreamId);
 		disconnectConfirm.writeInt8(DISCONNECT_CONFIRM);
 		return disconnectConfirm;
+	}
+	
+	public static BufferData createBufferIncrement(int priority, int remoteStreamId, int size) {
+
+		var bufferIncrement = BufferData.create(5);
+		bufferIncrement.writeInt8(priority);
+		bufferIncrement.writeInt8(remoteStreamId);
+		bufferIncrement.writeInt8(BUFFER_INCREMENT);
+		bufferIncrement.writeInt16(size);
+		return bufferIncrement;
+	}
+	
+	public static BufferIncrement parseBufferIncrement(BufferData buffer) {
+
+		var priority = buffer.read();
+		var localStreamId = buffer.read();
+		var command = buffer.read();
+		var size = buffer.readInt16();
+		buffer.rewind();
+
+		return new BufferIncrement(priority, localStreamId, size);
 	}
 }

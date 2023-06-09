@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import io.helidon.common.buffers.BufferData;
 
-public class StreamTransitBuffer extends InputStream {
+public class StreamInputStream extends InputStream {
 
 	private enum BufferMode { READ, WRITE };
 	private BufferMode mode = BufferMode.WRITE;
@@ -22,7 +22,7 @@ public class StreamTransitBuffer extends InputStream {
 	
 	private final LinkedTransferQueue<Integer> freeNotificationQueue = new LinkedTransferQueue<>();
 	
-	public StreamTransitBuffer(int capacity) {
+	public StreamInputStream(int capacity) {
 		buffer = ByteBuffer.allocate(capacity);
 	}
 	

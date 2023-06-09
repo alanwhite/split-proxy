@@ -15,7 +15,7 @@ class StreamTransitBufferTest {
 
 	@Test
 	void testWritingDataChangesAvailable() {
-		var inp = new StreamTransitBuffer(4096);
+		var inp = new StreamInputStream(4096);
 
 		assertDoesNotThrow(() -> {
 			assertEquals(0,inp.available());
@@ -34,7 +34,7 @@ class StreamTransitBufferTest {
 
 	@Test
 	void testReadByte() {
-		var inp = new StreamTransitBuffer(4096);
+		var inp = new StreamInputStream(4096);
 
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
@@ -53,7 +53,7 @@ class StreamTransitBufferTest {
 
 	@Test
 	void testInterleavedReadWrite() {
-		var inp = new StreamTransitBuffer(4096);
+		var inp = new StreamInputStream(4096);
 
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
@@ -85,7 +85,7 @@ class StreamTransitBufferTest {
 
 	@Test
 	void testWaitForData() {
-		var inp = new StreamTransitBuffer(4096);
+		var inp = new StreamInputStream(4096);
 
 		var x = new CompletableFuture<Integer>();
 		var y = new CompletableFuture<Integer>();
@@ -117,7 +117,7 @@ class StreamTransitBufferTest {
 	
 	@Test
 	void testFreeNotification() {
-		var inp = new StreamTransitBuffer(4096);
+		var inp = new StreamInputStream(4096);
 
 		var x = new CompletableFuture<Integer>();
 		var y = new CompletableFuture<Integer>();
