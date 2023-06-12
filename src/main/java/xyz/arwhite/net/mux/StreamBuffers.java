@@ -5,6 +5,7 @@ import xyz.arwhite.net.mux.StreamController.BufferIncrement;
 import xyz.arwhite.net.mux.StreamController.ConnectConfirm;
 import xyz.arwhite.net.mux.StreamController.ConnectFail;
 import xyz.arwhite.net.mux.StreamController.ConnectRequest;
+import xyz.arwhite.net.mux.StreamController.TransmitData;
 
 public class StreamBuffers {
 
@@ -150,5 +151,35 @@ public class StreamBuffers {
 		buffer.rewind();
 
 		return new BufferIncrement(priority, localStreamId, size);
+	}
+	
+	public static BufferData createTransmitData(int priority, int remoteStreamId, int size, byte[] data) {
+
+		var transmitData = BufferData.create(5 + size);
+		transmitData.writeInt8(priority);
+		transmitData.writeInt8(remoteStreamId);
+		transmitData.writeInt8(DATA);
+		transmitData.writeInt16(size);
+		transmitData.write(data, 0, size);
+		
+		return transmitData;
+	}
+	
+	/**
+	 * WARNING: this does not rewind the buffer and leaves it at the
+	 * read position for the data contents.
+	 * 
+	 * @param buffer
+	 * @return
+	 */
+	public static TransmitData parseTransmitData(BufferData buffer) {
+
+		buffer.reset();
+		var priority = buffer.read();
+		var localStreamId = buffer.read();
+		var command = buffer.read();
+		var size = buffer.readInt16();
+
+		return new TransmitData(priority, localStreamId, size, buffer);
 	}
 }

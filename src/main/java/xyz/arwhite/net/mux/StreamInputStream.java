@@ -8,13 +8,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import io.helidon.common.buffers.BufferData;
+import xyz.arwhite.net.mux.StreamController.TransmitData;
 
 public class StreamInputStream extends InputStream {
 
 	private enum BufferMode { READ, WRITE };
 	private BufferMode mode = BufferMode.WRITE;
-	private ByteBuffer buffer;
+	private ByteBuffer transitBuffer;
 	private AtomicInteger available = new AtomicInteger(0);
 	private final ReentrantLock bufferLock = new ReentrantLock();
 	private Condition dataAvailableToRead = bufferLock.newCondition();
@@ -23,7 +23,7 @@ public class StreamInputStream extends InputStream {
 	private final LinkedTransferQueue<Integer> freeNotificationQueue = new LinkedTransferQueue<>();
 	
 	public StreamInputStream(int capacity) {
-		buffer = ByteBuffer.allocate(capacity);
+		transitBuffer = ByteBuffer.allocate(capacity);
 	}
 	
 	/**
@@ -31,7 +31,7 @@ public class StreamInputStream extends InputStream {
 	 * 
 	 * @param incoming
 	 */
-	public void writeFromPeer(BufferData incoming) {
+	public void writeFromPeer(TransmitData incoming) {
 		
 		if ( closed )
 			return;
@@ -41,13 +41,13 @@ public class StreamInputStream extends InputStream {
 			
 			if ( mode != BufferMode.WRITE ) {
 				mode = BufferMode.WRITE;
-				buffer.compact();
+				transitBuffer.compact();
 			}	
 
-			var incomingLength = incoming.available();
+			var incomingLength = incoming.size();
 
-			incoming.read(buffer.array(), buffer.position(), incomingLength);
-			buffer.position(buffer.position() + incomingLength);
+			incoming.buffer().read(transitBuffer.array(), transitBuffer.position(), incomingLength);
+			transitBuffer.position(transitBuffer.position() + incomingLength);
 
 			available.addAndGet(incomingLength);
 			dataAvailableToRead.signalAll();
@@ -78,10 +78,10 @@ public class StreamInputStream extends InputStream {
 			
 			if ( mode != BufferMode.READ ) {
 				mode = BufferMode.READ;
-				buffer.flip();
+				transitBuffer.flip();
 			}	
 			
-			data = buffer.get();
+			data = transitBuffer.get();
 			
 			available.decrementAndGet();
 			
@@ -118,13 +118,13 @@ public class StreamInputStream extends InputStream {
 			
 			if ( mode != BufferMode.READ ) {
 				mode = BufferMode.READ;
-				buffer.flip();
+				transitBuffer.flip();
 			}	
 		
-			if ( bytesRead > buffer.remaining() )
-				bytesRead = buffer.remaining();
+			if ( bytesRead > transitBuffer.remaining() )
+				bytesRead = transitBuffer.remaining();
 
-			buffer.get(b, off, bytesRead);
+			transitBuffer.get(b, off, bytesRead);
 			
 			available.addAndGet(-bytesRead);
 			

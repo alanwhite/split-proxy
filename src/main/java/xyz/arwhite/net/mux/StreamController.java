@@ -25,6 +25,7 @@ public class StreamController {
 	public record DisconnectRequest(int priority, int localId) {};
 	public record DisconnectConfirm(int priority, int localId, int errorCode) {};
 	public record BufferIncrement(int priority, int localId, int size) {};
+	public record TransmitData(int priority, int localId, int size, BufferData buffer) {};
 	
 
 	private ArrayBlockingQueue<ConnectRequest> connectRequests = new ArrayBlockingQueue<>(NEW_STREAM_QUEUE_DEPTH);

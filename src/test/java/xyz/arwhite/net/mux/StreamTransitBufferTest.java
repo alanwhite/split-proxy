@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 import io.helidon.common.buffers.BufferData;
+import xyz.arwhite.net.mux.StreamController.TransmitData;
 
 class StreamTransitBufferTest {
 
@@ -21,10 +22,13 @@ class StreamTransitBufferTest {
 			assertEquals(0,inp.available());
 		});
 
+
 		var buff = BufferData.create(12);
 		byte[] bytes = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
+		
+		var td = new TransmitData(0, 0, 12, buff);
+		inp.writeFromPeer(td);
 
 		assertDoesNotThrow(() -> {
 			assertEquals(12,inp.available());
@@ -39,8 +43,10 @@ class StreamTransitBufferTest {
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
-
+		
+		var td = new TransmitData(0, 0, 12, buff);
+		inp.writeFromPeer(td);
+		
 		assertDoesNotThrow(() -> {
 			assertEquals(83,inp.read());
 		});
@@ -58,8 +64,10 @@ class StreamTransitBufferTest {
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
-
+		
+		var td = new TransmitData(0, 0, 12, buff);
+		inp.writeFromPeer(td);
+		
 		assertDoesNotThrow(() -> {
 			assertEquals(83,inp.read());
 		});
@@ -67,7 +75,8 @@ class StreamTransitBufferTest {
 		bytes[0] = 76;
 		buff.reset();
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
+		
+		inp.writeFromPeer(td);
 
 		assertDoesNotThrow(() -> {
 			assertEquals(23,inp.available());
@@ -108,7 +117,9 @@ class StreamTransitBufferTest {
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
+		
+		var td = new TransmitData(0, 0, 12, buff);
+		inp.writeFromPeer(td);
 		
 		assertDoesNotThrow(() -> {
 			assertEquals(1,y.get(3, TimeUnit.SECONDS));
@@ -144,8 +155,10 @@ class StreamTransitBufferTest {
 		var buff = BufferData.create(12);
 		byte[] bytes = { 83, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 		buff.write(bytes);
-		inp.writeFromPeer(buff);
-
+		
+		var td = new TransmitData(0, 0, 12, buff);
+		inp.writeFromPeer(td);
+		
 		assertDoesNotThrow(() -> {
 			assertEquals(83,inp.read());
 		});

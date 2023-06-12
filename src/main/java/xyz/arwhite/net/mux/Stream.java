@@ -273,9 +273,26 @@ public class Stream {
 						 * We can increment the amount of data the remote is prepared to receive
 						 */
 						
-						// ok well we have to update the quote but then what
-						// maybe there's data waiting to be written to the other
-						// end. Let's go implement the outputstream and we'll see how this goes ....
+						// TODO: inform the outputstream, ie how much more it can now send
+						
+					}
+					
+					case StreamBuffers.DATA -> {
+						/* 
+						 * Should only receive these if the stream is established
+						 */
+						if ( state != StreamState.CONNECTED ) {
+							streamController.deregisterStream(localId);
+							state = StreamState.ERROR;
+							disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
+							throw(new IllegalStateException("Invalid state change DC and not Closing"));
+						}
+						
+						/*
+						 * Inform the input stream - note 'parse' reads the headers from the buffer and
+						 * positions for reading the actual data
+						 */
+						inputStream.writeFromPeer(StreamBuffers.parseTransmitData(buffer));
 					}
 
 					} // switch
