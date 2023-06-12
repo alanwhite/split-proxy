@@ -146,6 +146,8 @@ public class StreamController {
 						}
 					} catch (LimitExceededException lee) {
 						errorCode = StreamConstants.MAX_STREAMS_EXCEEDED;
+					} catch (IOException e) {
+						errorCode = StreamConstants.UNABLE_TO_START_STREAM;
 					}
 
 					if ( errorCode != 0 ) 

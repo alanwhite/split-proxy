@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -87,6 +88,7 @@ public class Stream {
 	private long streamTimeout = DEFAULT_TIMEOUT;
 	
 	private StreamInputStream inputStream = new StreamInputStream(4096);
+	private StreamOutputStream outputStream;
 	
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
@@ -100,8 +102,9 @@ public class Stream {
 	 * otherwise the id received in an incoming connect request
 	 * 
 	 * @param priority
+	 * @throws IOException 
 	 */
-	public Stream(StreamController controller, int localId, int remoteId, int priority) {
+	public Stream(StreamController controller, int localId, int remoteId, int priority) throws IOException {
 		this();
 		setStreamController(controller);
 		setLocalId(localId);
@@ -113,7 +116,7 @@ public class Stream {
 		// maybe needed for when invoked from a listen / accept
 	}
 
-	public Stream(StreamController controller) throws LimitExceededException {
+	public Stream(StreamController controller) throws LimitExceededException, IOException {
 		this();
 		setStreamController(controller);
 		setLocalId(streamController.registerStream(this));
@@ -274,6 +277,7 @@ public class Stream {
 						 */
 						
 						// TODO: inform the outputstream, ie how much more it can now send
+						outputStream.increaseRemoteAvailable(StreamBuffers.parseBufferIncrement(buffer).size());
 						
 					}
 					
@@ -327,8 +331,8 @@ public class Stream {
 			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
 
 		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
-		streamPort = ssa.getStreamPort();
-		streamController = ssa.getStreamController();
+		setStreamPort(ssa.getStreamPort());
+		setStreamController(ssa.getStreamController());
 
 		try {
 			this.localId = streamController.registerStream(this);
@@ -405,6 +409,10 @@ public class Stream {
 	public boolean isClosed() {
 		return state == StreamState.CLOSED || state == StreamState.CLOSING || state == StreamState.ERROR;
 	}
+	
+	protected void sendData(ByteBuffer buffer, int size) {
+		streamController.send(StreamBuffers.createTransmitData(priority, remoteId, buffer, size));
+	}
 
 	private static void log(String text) {
 		System.out.println(Thread.currentThread().isVirtual()+
@@ -455,8 +463,13 @@ public class Stream {
 		return streamController;
 	}
 
-	public void setStreamController(StreamController streamController) {
+	public void setStreamController(StreamController streamController) throws IOException {
+		
+		if ( state != StreamState.UNCONNECTED )
+			throw(new IOException("Stream must be in an unconnected state"));
+		
 		this.streamController = streamController;
+		outputStream = new StreamOutputStream(4096, this);
 	}
 
 	public long getStreamTimeout() {

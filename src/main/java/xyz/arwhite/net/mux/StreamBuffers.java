@@ -1,5 +1,7 @@
 package xyz.arwhite.net.mux;
 
+import java.nio.ByteBuffer;
+
 import io.helidon.common.buffers.BufferData;
 import xyz.arwhite.net.mux.StreamController.BufferIncrement;
 import xyz.arwhite.net.mux.StreamController.ConnectConfirm;
@@ -151,16 +153,28 @@ public class StreamBuffers {
 		buffer.rewind();
 
 		return new BufferIncrement(priority, localStreamId, size);
-	}
 	
-	public static BufferData createTransmitData(int priority, int remoteStreamId, int size, byte[] data) {
+	}
+
+	/**
+	 * ByteBuffer provided must be in READ mode and positioned where to copy from.
+	 * 
+	 * @param priority
+	 * @param remoteStreamId
+	 * @param buffer
+	 * @param size
+	 * @return
+	 */
+	public static BufferData createTransmitData(int priority, int remoteStreamId, ByteBuffer buffer, int size) {
 
 		var transmitData = BufferData.create(5 + size);
 		transmitData.writeInt8(priority);
 		transmitData.writeInt8(remoteStreamId);
 		transmitData.writeInt8(DATA);
 		transmitData.writeInt16(size);
-		transmitData.write(data, 0, size);
+		
+		transmitData.write(buffer.array(), buffer.position(), size);
+		buffer.position(buffer.position() + size);
 		
 		return transmitData;
 	}
