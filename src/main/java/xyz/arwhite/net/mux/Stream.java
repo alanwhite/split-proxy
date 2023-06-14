@@ -2,6 +2,7 @@ package xyz.arwhite.net.mux;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -482,6 +483,10 @@ public class Stream {
 
 	public InputStream getInputStream() {
 		return inputStream;
+	}
+
+	public OutputStream getOutputStream() {
+		return outputStream;
 	}
 
 

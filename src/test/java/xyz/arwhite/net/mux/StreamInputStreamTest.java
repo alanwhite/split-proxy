@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import io.helidon.common.buffers.BufferData;
 import xyz.arwhite.net.mux.StreamController.TransmitData;
 
-class StreamTransitBufferTest {
+class StreamInputStreamTest {
 
 	@Test
 	void testWritingDataChangesAvailable() {

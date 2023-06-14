@@ -42,6 +42,8 @@ public class StreamOutputStream extends OutputStream {
 	public StreamOutputStream(int capacity, Stream stream) {
 		transitBuffer = ByteBuffer.allocate(capacity);
 		transitAvailableToWrite = new AtomicInteger(capacity);
+		transitAvailableToRead = new AtomicInteger(0);
+		
 		this.stream = stream;
 
 		// start the virtual thread that waits for data to be in the transit buffer
@@ -61,7 +63,13 @@ public class StreamOutputStream extends OutputStream {
 	 */
 	public void increaseRemoteAvailable(int size) {
 		remoteFreeCapacity.addAndGet(size);
-		remoteBufferHasFreeCapacity.signalAll();
+		
+		try {
+			bufferLock.lock();
+			remoteBufferHasFreeCapacity.signalAll();
+		} finally {
+			bufferLock.unlock();
+		}
 	}
 
 	/*
@@ -101,6 +109,8 @@ public class StreamOutputStream extends OutputStream {
 					transitBuffer.flip();
 				}	
 
+				// logTransitProps("Before Offloading");
+				
 				// limit sending to whatever the remote end can take
 				int bytesRead = remoteFreeCapacity.get();
 
@@ -111,7 +121,8 @@ public class StreamOutputStream extends OutputStream {
 					bytesRead = transitBuffer.remaining();
 
 				stream.sendData(transitBuffer, bytesRead);
-
+				// logTransitProps("After Send");
+				
 				remoteFreeCapacity.addAndGet(-bytesRead);
 				transitAvailableToRead.addAndGet(-bytesRead);
 
@@ -122,12 +133,21 @@ public class StreamOutputStream extends OutputStream {
 				throw( new IOException(e) );
 
 			} finally {
+				// logTransitProps("After Offloading");
 				bufferLock.unlock();
 			}
 
 		}
 
 	}
+	
+//	private void logTransitProps(String who) {
+//		System.out.println(who);
+//		System.out.println("Position "+transitBuffer.position());
+//		System.out.println("Limit "+transitBuffer.limit());
+//		System.out.println("");
+//		
+//	}
 
 	@Override
 	/**
@@ -149,6 +169,8 @@ public class StreamOutputStream extends OutputStream {
 				transitBuffer.compact();
 			}	
 
+			// logTransitProps("Writing Transit Buffer");
+			
 			transitBuffer.put((byte) b);
 
 			transitAvailableToWrite.addAndGet(-1);
@@ -159,6 +181,7 @@ public class StreamOutputStream extends OutputStream {
 			throw( new IOException(e) );
 
 		} finally {
+			// logTransitProps("After writing Transit Buffer");
 			bufferLock.unlock();
 		}
 
