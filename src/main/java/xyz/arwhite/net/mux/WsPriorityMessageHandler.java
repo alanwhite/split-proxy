@@ -1,14 +1,14 @@
 package xyz.arwhite.net.mux;
 
-import io.helidon.common.buffers.BufferData;
-import io.helidon.nima.websocket.WsListener;
-import io.helidon.nima.websocket.WsSession;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.time.Clock;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.PriorityBlockingQueue;
 
-public class WsPriorityMessageHandler implements WsListener, MessageBroker {
+import io.helidon.common.buffers.BufferData;
+import io.helidon.nima.websocket.WsSession;
+
+public class WsPriorityMessageHandler extends MessageLinkAdapter {
 
 	private Clock clock;
 	
@@ -166,6 +166,12 @@ public class WsPriorityMessageHandler implements WsListener, MessageBroker {
 	 */
 	public Queue<PriorityQueueEntry> getTxQueue() {
 		return txQueue;
+	}
+
+	@Override
+	public void stop() {
+		// TODO Auto-generated method stub
+		
 	}
 
 }

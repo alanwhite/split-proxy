@@ -38,7 +38,7 @@ public class StreamController {
 	 * 
 	 * @param broker
 	 */
-	public StreamController(MessageBroker broker) {
+	private StreamController(MessageBroker broker) {
 		this.broker = broker;
 
 		streams = new StreamMap();
@@ -234,6 +234,56 @@ public class StreamController {
 
 	public boolean send(BufferData buffer) {
 		return broker.sendMessage(buffer);
+	}
+	
+	/*
+	 * We want the experience to be you create a MuxSocketFactory / MuxServerSocketFactory
+	 * specifying the StreamController to use.
+	 * 
+	 * You can create a StreamController only when you have a MessageBroker for it to integrate with.
+	 * 
+	 * The MessageBroker we are using is a WsListener on a WebSocket.
+	 * 
+	 * Our choice is have a separate class for creating the suitable websocket, or integrate it
+	 * with creating a StreamController.
+	 * 
+	 * If we have a separate class, e.g. MuxWsTunnel, we could provide it to the builder pattern 
+	 * here, and have the option to create the MuxWsTunnel within the builder itself.
+	 * 
+	 * Well it's really just a WebSocket with a handler that has a MessageBroker interface.
+	 * In the future we might have the MessageBroker implemented over a straight TCP connection.
+	 * 
+	 * We do need a separate WS based MessageBroker, it is a tunnel but that's a bad word to many.
+	 * It's a MessageBroker based WS based connection, either client or server mode.
+	 * It doesn't really do the Muxing, it just exchanges messages. It's suitable for Muxing over.
+	 * with priorities.
+	 * WS - MessageBroker - Suitable for Muxing. It's a WsMessageExchange .... point to point
+	 * A WsMessageRelay endpoint.... a WsMessageLink that implements the MessageBroker interface 
+	 * 
+	 * So we have a WsMessageLink, in either client or server mode. When we build that we 
+	 * have to supply a message handler so we will provide the WsPriorityMessageHandler.
+	 * 
+	 * Separate class.
+	 * 
+	 */
+	public static class Builder {
+		MessageBroker messageBroker;
+		WsMessageLink messageLink;
+		
+		public Builder withMessageBroker(MessageBroker messageBroker) {
+			this.messageBroker = messageBroker;
+			return this;
+		}
+		
+		public Builder withMessageLink(WsMessageLink wsml) {
+			this.messageLink = wsml;
+			messageBroker = wsml.getMessageBroker();
+			return this;
+		}
+		
+		public StreamController build() {
+			return new StreamController(messageBroker);
+		}
 	}
 
 }

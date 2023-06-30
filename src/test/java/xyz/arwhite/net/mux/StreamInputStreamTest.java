@@ -112,6 +112,7 @@ class StreamInputStreamTest {
 		});
 		
 		assertEquals(false,y.isDone());
+		assertDoesNotThrow(() -> Thread.sleep(Duration.ofSeconds(1)) );
 		assertEquals(State.WAITING, t.getState());
 
 		var buff = BufferData.create(12);
