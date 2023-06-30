@@ -112,6 +112,8 @@ class StreamInputStreamTest {
 		});
 		
 		assertEquals(false,y.isDone());
+		
+		// give thread a chance to move to waiting for IO, and check it has
 		assertDoesNotThrow(() -> Thread.sleep(Duration.ofSeconds(1)) );
 		assertEquals(State.WAITING, t.getState());
 
