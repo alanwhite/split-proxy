@@ -22,14 +22,32 @@ class IntegrationTests {
 		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault());
 	}
 
-//	@Test
-//	void testMux() throws IOException, InterruptedException {
-//		testPattern(
-//				new MuxServerSocketFactory.Builder()
-//					.withMux(null)
-//					.build(),
-//				SocketFactory.getDefault());
-//	}
+	@Test
+	void testMux() throws IOException, InterruptedException {
+		
+		var wsServerLink = new WsMessageLink.Builder()
+				.withEndpoint("127.0.0.1")
+				.withPort(3258)
+				.listen();
+		
+		var linkServerMux = new StreamController.Builder()
+				.withMessageLink(wsServerLink).build();
+		
+		var muxServerSocketFactory = new MuxServerSocketFactory.Builder()
+				.withMux(linkServerMux)
+				.build();
+		
+		var wsClientLink = new WsMessageLink.Builder()
+				.withEndpoint("127.0.0.1")
+				.withPort(3258)
+				.connect();
+		
+		var linkClientMux = new StreamController.Builder()
+				.withMessageLink(wsClientLink)
+				.build();
+		
+		testPattern(muxServerSocketFactory,SocketFactory.getDefault());
+	}
 
 	private void testPattern(ServerSocketFactory serverFactory, SocketFactory clientFactory) throws IOException, InterruptedException {
 
