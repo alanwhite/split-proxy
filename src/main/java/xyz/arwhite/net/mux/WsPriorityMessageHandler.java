@@ -1,5 +1,6 @@
 package xyz.arwhite.net.mux;
 
+import java.net.http.WebSocket;
 import java.time.Clock;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -67,6 +68,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 			txQueueSender.interrupt();
 		
 		txQueueSender = null;
+		//?? session.terminate();
 	}
 
 	/*
@@ -170,7 +172,9 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 
 	@Override
 	public void stop() {
-		// TODO Auto-generated method stub
+		drainTxQueue();
+		session.close(WebSocket.NORMAL_CLOSURE, "Request");
+		// session.terminate();
 		
 	}
 

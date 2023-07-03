@@ -9,9 +9,13 @@ public class WsMessageLink {
 	// this is the only object that matters and is common
 	// whether the link was launched in client or server mode
 	private MessageLinkAdapter messageBroker;
-		
+	private WebServer server;
+	private boolean isServer;
+	
 	private WsMessageLink(Builder builder) {
 		this.messageBroker = builder.messageBroker;
+		this.server = builder.server;
+		this.isServer = server != null;
 	}
 	
 	/**
@@ -19,6 +23,9 @@ public class WsMessageLink {
 	 */
 	public void stop() {
 		messageBroker.stop();
+		
+		if ( isServer )
+			server.stop();
 	}
 	
 	public static class Builder {
