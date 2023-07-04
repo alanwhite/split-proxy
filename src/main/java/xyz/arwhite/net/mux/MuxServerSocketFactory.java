@@ -2,6 +2,7 @@ package xyz.arwhite.net.mux;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 
 import javax.net.ServerSocketFactory;
@@ -29,27 +30,41 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 
 	@Override
 	public ServerSocket createServerSocket(int port) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		log("createServerSocket(p)");
+		var s = new MuxServerSocket(new MuxSocketImpl());
+		s.bind(new StreamSocketAddress(streamController, port));
+		return s;
 	}
 
 	@Override
 	public ServerSocket createServerSocket(int port, int backlog) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		log("createServerSocket(p,b)");
+		
+		var i = new MuxSocketImpl();
+		i.setStreamController(streamController);
+		var s = new MuxServerSocket(i);
+		
+		s.bind(new InetSocketAddress("127.0.0.1",port), backlog);
+		return s;
 	}
 
 	@Override
 	public ServerSocket createServerSocket(int port, int backlog, InetAddress ifAddress) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		log("createServerSocket(p,b,ia)");
+		
+		var s = new MuxServerSocket(new MuxSocketImpl());
+		s.bind(new StreamSocketAddress(streamController,port), backlog);
+
+		// TODO: what to do about the ifAddress, not meaningful here
+		
+		return s;
 	}
 	
-	public static ServerSocketFactory getDefault() {
-		// TODO: implement a default WebSocket & StreamHandler 
-		// that attempts to connect to ws://localhost:3258
-		return null; // new MuxServerSocketFactory(this);
-	}
+//	public static ServerSocketFactory getDefault() {
+//		// TODO: implement a default WebSocket & StreamHandler 
+//		// that attempts to connect to ws://localhost:3258
+//		return null; // new MuxServerSocketFactory(this);
+//	}
 	
 	public static class Builder {
 		StreamController streamController;
@@ -64,4 +79,7 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 		}
 	}
 
+	private void log(String m) {
+		System.out.println("MuxServerSocketFactory: "+Integer.toHexString(this.hashCode())+" :"+ m);
+	}
 }

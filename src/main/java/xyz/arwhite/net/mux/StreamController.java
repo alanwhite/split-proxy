@@ -15,7 +15,7 @@ public class StreamController {
 	 * The number of queued connect requests that have not been passed to a StreamServer
 	 */
 	private static final int NEW_STREAM_QUEUE_DEPTH = 64;
-	
+
 	private MessageBroker broker;
 	private Thread messageReaderThread;
 
@@ -26,12 +26,12 @@ public class StreamController {
 	public record DisconnectConfirm(int priority, int localId, int errorCode) {};
 	public record BufferIncrement(int priority, int localId, int size) {};
 	public record TransmitData(int priority, int localId, int size, BufferData buffer) {};
-	
+
 
 	private ArrayBlockingQueue<ConnectRequest> connectRequests = new ArrayBlockingQueue<>(NEW_STREAM_QUEUE_DEPTH);
 	private StreamMap streams;
 
-	private ConcurrentHashMap<Integer, StreamServer> streamPorts;
+	private ConcurrentHashMap<Integer, StreamServer> streamPorts = new ConcurrentHashMap<>();
 
 	/**
 	 * Sets up receiver on provided message broker
@@ -70,23 +70,24 @@ public class StreamController {
 	public boolean deregisterStreamServer(int port) {
 		return streamPorts.remove(port) != null;
 	}
-	
+
 	protected int registerStream(Stream stream) throws LimitExceededException {
+		log("registerStream");
 		
 		int localStreamId = streams.allocNewStreamId();
 
 		// add entry to Streams map 
 		streams.put(Integer.valueOf(localStreamId), stream); 
-		
+
 		return localStreamId;
 	}
-	
+
 	protected boolean deregisterStream(int stream) {
-		
+
 		var result = streams.remove(stream) != null;
 		if ( result )
 			streams.freeStreamId(stream);
-		
+
 		return result;
 	}
 
@@ -114,7 +115,8 @@ public class StreamController {
 			try {
 				while(true) {
 					var connectRequest = connectRequests.take();
-
+					log("CR in");
+					
 					int errorCode = 0; 
 
 					try { 
@@ -142,6 +144,7 @@ public class StreamController {
 							if ( !listener.connectStream(stream) ) {
 								streams.remove(Integer.valueOf(localStreamId));
 								// TODO: log an error message
+								log("server stream not able to handle a connect request");
 							}
 						}
 					} catch (LimitExceededException lee) {
@@ -168,10 +171,10 @@ public class StreamController {
 	 * @param broker
 	 */
 	private void setupBroker(MessageBroker broker) {
-
+		log("setupBroker");
 		messageReaderThread = Thread.ofVirtual().start(
 				new MessageReader(
-						(BlockingQueue<BufferData>) broker.getRxQueue(),
+						(BlockingQueue<PriorityQueueEntry>) broker.getRxQueue(), // it's priority queue entries that come back here
 						connectRequests));
 
 	}
@@ -188,11 +191,11 @@ public class StreamController {
 	 */
 	private class MessageReader implements Runnable {
 
-		private BlockingQueue<BufferData> rxQueue;
+		private BlockingQueue<PriorityQueueEntry> rxQueue;
 		private BlockingQueue<ConnectRequest> connectRequests;
 
 		public MessageReader(
-				BlockingQueue<BufferData> rxQueue, 
+				BlockingQueue<PriorityQueueEntry> rxQueue, 
 				BlockingQueue<ConnectRequest> connectRequests) {
 
 			this.rxQueue = rxQueue;
@@ -203,7 +206,11 @@ public class StreamController {
 		public void run() {
 			try {
 				while(true) {
-					var buffer = rxQueue.take();
+					var pqe = rxQueue.take();
+					var buffer = pqe.message();
+					
+					log("incoming");
+
 					var command = StreamBuffers.getBufferType(buffer);
 
 					// must dispatch without blocking
@@ -215,9 +222,15 @@ public class StreamController {
 						if ( stream != null ) {
 							if ( !stream.getPeerIncoming().offer(buffer) ) {
 								// TODO: Log dropping data for backed up stream
+								log("dropping due to backed up stream");
+								
+							} else {
+								log("data buffer passed to stream on "+stream.getPeerIncoming().hashCode());
+								log("peer incoming used = "+stream.getPeerIncoming().size());
 							}
 						} else {
 							// TODO: Log buffer received for non-existant stream
+							log("message for unknown stream discarded");
 						}
 					}
 
@@ -233,9 +246,15 @@ public class StreamController {
 	}
 
 	public boolean send(BufferData buffer) {
+		log("send");
 		return broker.sendMessage(buffer);
 	}
-	
+
+	private static void log(String text) {
+		System.out.println("StreamController: "+Thread.currentThread().isVirtual()+
+				":"+Thread.currentThread().threadId()+":"+text);
+	}
+
 	/*
 	 * We want the experience to be you create a MuxSocketFactory / MuxServerSocketFactory
 	 * specifying the StreamController to use.
@@ -269,18 +288,18 @@ public class StreamController {
 	public static class Builder {
 		MessageBroker messageBroker;
 		WsMessageLink messageLink;
-		
+
 		public Builder withMessageBroker(MessageBroker messageBroker) {
 			this.messageBroker = messageBroker;
 			return this;
 		}
-		
+
 		public Builder withMessageLink(WsMessageLink wsml) {
 			this.messageLink = wsml;
 			messageBroker = wsml.getMessageBroker();
 			return this;
 		}
-		
+
 		public StreamController build() {
 			return new StreamController(messageBroker);
 		}

@@ -27,6 +27,8 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	
 	@Override
 	public void onOpen(WsSession session) {
+		log("onOpen");
+		
 		this.session = session;
 		
 		CompletableFuture<Void> started = new CompletableFuture<>();
@@ -37,6 +39,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 				started.complete(null);
 				while(true) {
 					var qe = txQueue.take();
+					log("Tx:\n"+qe.message().debugDataHex());
 					
 					if ( qe.priority() == 0 ) {
 						
@@ -123,6 +126,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	 */
 	@Override
 	public boolean sendMessage(BufferData buffer) {
+		log("sendMessage:\n"+buffer.debugDataHex());
 		
 		if ( draining )
 			return false;
@@ -176,6 +180,10 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 		session.close(WebSocket.NORMAL_CLOSURE, "Request");
 		// session.terminate();
 		
+	}
+	
+	private void log(String m) {
+		System.out.println("WsPriorityMessageHandler: "+Integer.toHexString(this.hashCode())+" :"+ m);
 	}
 
 }

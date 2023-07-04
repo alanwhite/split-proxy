@@ -12,7 +12,7 @@ public class StreamServer {
 	 * The controller of all IO on the underlying connection supporting the multiplexed streams.
 	 */
 	private StreamController controller;
-	
+
 	/**
 	 * The port that this {@link xyz.arwhite.net.mux.StreamServer StreamServer} is listening on. 
 	 * 
@@ -32,7 +32,7 @@ public class StreamServer {
 	 * for an entry in this queue.
 	 */
 	private ArrayBlockingQueue<ConnectionEntry> connections = new ArrayBlockingQueue<>(16);
-	
+
 	/**
 	 * Defines an entry in the connections queue. The {@link java.util.concurrent.CompletableFuture 
 	 * CompletableFuture} is used by the {@link #accept Accept} method to ensure it does not return 
@@ -45,7 +45,7 @@ public class StreamServer {
 	 *
 	 */
 	private record ConnectionEntry(CompletableFuture<Void> connected, Stream stream) {};
-	
+
 	/**
 	 * Direct constructor.
 	 * 
@@ -57,8 +57,16 @@ public class StreamServer {
 		this.controller = controller;
 		this.port = port;
 
-		if ( !controller.registerStreamServer(port, this) )
-			throw (new IllegalArgumentException("port already in use"));
+		if ( port == 0 ) {
+			// find a free port in a brute force fashion
+			int tryPort = 1;
+			while( !controller.registerStreamServer(tryPort, this) )
+				tryPort++;
+
+			this.port = tryPort;
+		} else 
+			if ( !controller.registerStreamServer(port, this) )
+				throw (new IllegalArgumentException("port already in use"));
 
 	}
 
@@ -70,9 +78,9 @@ public class StreamServer {
 	 * @return
 	 */
 	public boolean connectStream(Stream stream) {
-		
+
 		var conn = new ConnectionEntry(new CompletableFuture<Void>(), stream);
-				
+
 		if ( connections.offer(conn) ) {
 
 			controller.send(
@@ -80,19 +88,22 @@ public class StreamServer {
 							stream.getPriority(), 
 							stream.getRemoteId(), 
 							stream.getLocalId()));
+
+			// tell stream it is now connected
+			stream.setConnected();
 			
 			conn.connected().complete(null);
-			
+
 			return true;
-			
+
 		} else {	
-			
+
 			controller.send(
 					StreamBuffers.createConnectFail(
 							stream.getPriority(), 
 							stream.getRemoteId(), 
 							StreamConstants.PENDING_STREAM_PORT_CONNECTIONS_EXCEEDED));
-			
+
 			return false;
 		}
 	}
@@ -105,9 +116,9 @@ public class StreamServer {
 	 */
 	public Stream accept() throws InterruptedException, ExecutionException {
 		var conn = connections.take();
-		
+
 		// wait for the connect confirm to be sent
-		if ( !conn.connected().isDone() ) 
+		if ( !conn.connected.isDone() ) 
 			conn.connected.get();
 		
 		return conn.stream();
@@ -119,5 +130,9 @@ public class StreamServer {
 	public void close() {
 		if ( !controller.deregisterStreamServer(port) ) 
 			throw (new IllegalArgumentException("port not in use"));
+	}
+
+	public int getPort() {
+		return port;
 	}
 }

@@ -3,6 +3,7 @@ package xyz.arwhite.net.mux;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -70,7 +71,7 @@ public class Stream {
 	/**
 	 * The relative priority on the WebSocket of messages for this Stream.
 	 */
-	private int priority;
+	private int priority = 50;
 
 	/**
 	 * The remote streamPort to which this Stream is connected 
@@ -93,7 +94,7 @@ public class Stream {
 	
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
-	 * to connect a Stream across the WebSocket, or receiving a connect request from the peer.
+	 * to connect a Stream across the WebSocket, ie receiving a connect request from the peer.
 	 * 
 	 * @param controller the StreamController managing the WebSocket this stream is multiplexed on
 	 * 
@@ -111,6 +112,8 @@ public class Stream {
 		setLocalId(localId);
 		setRemoteId(remoteId);
 		setPriority(priority);
+		startReceiver(peerIncoming);
+		state = StreamState.CONNECTING;
 		
 		// Set up consumer thread for peerIncoming
 		// setupIncoming(peerIncoming);
@@ -130,6 +133,7 @@ public class Stream {
 	 * consumer of this Stream.
 	 */
 	public Stream() {
+		log("Stream");
 		
 		// TODO: test buffer increment flow
 		Thread.ofVirtual().start(() -> {
@@ -153,6 +157,8 @@ public class Stream {
 	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
+		log("startReceiver");
+		
 		Thread.ofVirtual().start(
 				new Incoming(peerIncoming));
 	}
@@ -170,13 +176,16 @@ public class Stream {
 			try {
 				boolean halt_receiver = false;
 				while(!halt_receiver) {
+					log("awaiting data "+peerIncoming.hashCode());
 					var buffer = peerIncoming.take();
-
+					log("incoming");
+					
 					var command = StreamBuffers.getBufferType(buffer);
 					
 					switch( command ) {
 					// what about connect requests .....
 					case StreamBuffers.CONNECT_CONFIRM -> {
+						log("CONNECT_CONFIRM");
 						/*
 						 * If we receive a Connect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -206,6 +215,7 @@ public class Stream {
 
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
+						log("CONNECT_FAIL");
 						/*
 						 * We have received a Connect Fail in response
 						 * to a Connect Request we sent. The connection
@@ -223,6 +233,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_REQUEST -> {
+						log("DISCONNECT_REQUEST");
 						/*
 						 * Need to shut down and send confirm
 						 */
@@ -238,6 +249,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_CONFIRM -> {
+						log("DISCONNECT_CONFIRM");
 						/*
 						 * If we receive a Disconnect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -263,13 +275,14 @@ public class Stream {
 					}
 					
 					case StreamBuffers.BUFFER_INCREMENT -> {
+						log("BUFFER_INCREMENT");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
 						if ( state != StreamState.CONNECTED ) {
 							streamController.deregisterStream(localId);
 							state = StreamState.ERROR;
-							disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
+							// disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
 							throw(new IllegalStateException("Invalid state change DC and not Closing"));
 						}
 						
@@ -283,21 +296,29 @@ public class Stream {
 					}
 					
 					case StreamBuffers.DATA -> {
+						log("DATA");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
 						if ( state != StreamState.CONNECTED ) {
+							log("State error");
 							streamController.deregisterStream(localId);
 							state = StreamState.ERROR;
-							disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
-							throw(new IllegalStateException("Invalid state change DC and not Closing"));
+							// disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
+							log("throw error");
+							throw(new IllegalStateException("Invalid state to receive data"));
 						}
 						
 						/*
 						 * Inform the input stream - note 'parse' reads the headers from the buffer and
 						 * positions for reading the actual data
 						 */
+						log("calling writeFromPeer on "+inputStream.hashCode());
 						inputStream.writeFromPeer(StreamBuffers.parseTransmitData(buffer));
+					}
+					
+					default -> {
+						log("default = unknown message type");
 					}
 
 					} // switch
@@ -306,8 +327,15 @@ public class Stream {
 				log("peerIncoming receiver tidily closed");
 				
 			} catch(InterruptedException | IllegalStateException e) {
+				log("stream terminated by exception");
 				streamController.deregisterStream(localId);
 				state = StreamState.ERROR;
+//				try {
+//					inputStream.close();
+//				} catch (IOException e1) {
+//					// TODO Auto-generated catch block
+//					e1.printStackTrace();
+//				}
 			} 
 		}
 
@@ -325,22 +353,28 @@ public class Stream {
 	public void connect(SocketAddress endpoint, int timeout) 
 			throws IOException, LimitExceededException {
 
-		if ( !(endpoint instanceof StreamSocketAddress) )
-			throw(new IOException("endpoint must be of type StreamSocketAddress") );
+		log("connect");
+		
+//		if ( !(endpoint instanceof StreamSocketAddress) )
+//			throw(new IOException("endpoint must be of type StreamSocketAddress") );
 
 		if ( state != StreamState.UNCONNECTED )
 			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
 
-		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
-		setStreamPort(ssa.getStreamPort());
-		setStreamController(ssa.getStreamController());
+//		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
+		if ( endpoint instanceof InetSocketAddress ) {
+			var ep = (InetSocketAddress) endpoint;
+			setStreamPort(ep.getPort());
+		}
+		
+//		setStreamController(ssa.getStreamController());
 
 		try {
 			this.localId = streamController.registerStream(this);
 
 			state = StreamState.CONNECTING;
 
-			// become able to receive any responses 
+			// become able to receive any responses
 			startReceiver(peerIncoming);
 
 			streamController.send(StreamBuffers.createConnectRequest(priority, this.getLocalId(), streamPort));
@@ -378,6 +412,8 @@ public class Stream {
 	 * @throws IOException 
 	 */
 	public void close() throws IOException {
+		log("close");
+		
 		// send a disconnect request message
 		// await a disconnect confirm or timeout
 		state = StreamState.CLOSING;
@@ -414,9 +450,13 @@ public class Stream {
 	protected void sendData(ByteBuffer buffer, int size) {
 		streamController.send(StreamBuffers.createTransmitData(priority, remoteId, buffer, size));
 	}
+	
+	protected void setConnected() {
+		this.state = StreamState.CONNECTED;
+	}
 
 	private static void log(String text) {
-		System.out.println(Thread.currentThread().isVirtual()+
+		System.out.println("Stream :"+Thread.currentThread().isVirtual()+
 				":"+Thread.currentThread().threadId()+":"+text);
 	}
 
@@ -488,6 +528,5 @@ public class Stream {
 	public OutputStream getOutputStream() {
 		return outputStream;
 	}
-
 
 }

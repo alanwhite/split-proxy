@@ -188,7 +188,7 @@ public class StreamBuffers {
 	 */
 	public static TransmitData parseTransmitData(BufferData buffer) {
 
-		buffer.reset();
+		// buffer.reset();
 		var priority = buffer.read();
 		var localStreamId = buffer.read();
 		var command = buffer.read();

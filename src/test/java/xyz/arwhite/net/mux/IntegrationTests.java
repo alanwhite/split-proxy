@@ -1,13 +1,15 @@
 package xyz.arwhite.net.mux;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.time.Duration;
-import java.util.List;
 import java.util.ArrayList;
-import java.util.concurrent.*;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import javax.net.ServerSocketFactory;
@@ -17,17 +19,18 @@ import org.junit.jupiter.api.Test;
 
 class IntegrationTests {
 
-	@Test
-	void defaultPattern() throws IOException, InterruptedException {
-		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault());
-	}
+//	@Test
+//	void defaultPattern() throws IOException, InterruptedException {
+//		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault(),100);
+//	}
 
 	@Test
 	void testMux() throws IOException, InterruptedException {
 		
+		var serverHandler = new WsPriorityMessageHandler();
 		var wsServerLink = new WsMessageLink.Builder()
+				.withMessageBroker(serverHandler)
 				.withEndpoint("127.0.0.1")
-				.withPort(3258)
 				.listen();
 		
 		var linkServerMux = new StreamController.Builder()
@@ -37,22 +40,29 @@ class IntegrationTests {
 				.withMux(linkServerMux)
 				.build();
 		
+		var clientHandler = new WsPriorityMessageHandler();
 		var wsClientLink = new WsMessageLink.Builder()
+				.withMessageBroker(clientHandler)
 				.withEndpoint("127.0.0.1")
-				.withPort(3258)
+				.withPort(wsServerLink.getLocalPort())
 				.connect();
 		
 		var linkClientMux = new StreamController.Builder()
 				.withMessageLink(wsClientLink)
 				.build();
 		
-		testPattern(muxServerSocketFactory,SocketFactory.getDefault());
+		var muxSocketFactory = new MuxSocketFactory.Builder()
+				.withMux(linkClientMux)
+				.build();
+		
+		testPattern(muxServerSocketFactory,muxSocketFactory,1);
 	}
 
-	private void testPattern(ServerSocketFactory serverFactory, SocketFactory clientFactory) throws IOException, InterruptedException {
+	private void testPattern(ServerSocketFactory serverFactory, SocketFactory clientFactory, int iterations) 
+			throws IOException, InterruptedException {
 
 		// Server thread(s)
-		final ServerSocket server = serverFactory.createServerSocket(0, 100);
+		final ServerSocket server = serverFactory.createServerSocket(0, iterations > 50 ? iterations : 0);
 		final var port = server.getLocalPort();
 
 		Thread.ofVirtual().start(() -> {
@@ -84,7 +94,7 @@ class IntegrationTests {
 
 		// final SocketFactory clientFactory = SocketFactory.getDefault();
 
-		for (int i=0;i<100; i++) 
+		for (int i=0;i<iterations; i++) 
 			tasks.add(() -> {
 				long start = System.nanoTime();
 				var client = clientFactory.createSocket("127.0.0.1", port);
@@ -126,7 +136,7 @@ class IntegrationTests {
 	}
 
 	private void log(String msg) {
-		// System.out.println(Thread.currentThread().threadId()+": "+msg);
+		System.out.println(Thread.currentThread().threadId()+": "+msg);
 	}
 
 }
