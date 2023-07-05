@@ -55,7 +55,7 @@ class IntegrationTests {
 				.withMux(linkClientMux)
 				.build();
 		
-		testPattern(muxServerSocketFactory,muxSocketFactory,1);
+		testPattern(muxServerSocketFactory,muxSocketFactory,20);
 	}
 
 	private void testPattern(ServerSocketFactory serverFactory, SocketFactory clientFactory, int iterations) 

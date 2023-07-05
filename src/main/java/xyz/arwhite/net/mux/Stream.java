@@ -330,6 +330,7 @@ public class Stream {
 				log("stream terminated by exception");
 				streamController.deregisterStream(localId);
 				state = StreamState.ERROR;
+				e.printStackTrace();
 //				try {
 //					inputStream.close();
 //				} catch (IOException e1) {
