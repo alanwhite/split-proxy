@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.naming.LimitExceededException;
 
@@ -11,6 +13,8 @@ import io.helidon.common.buffers.BufferData;
 
 public class StreamController {
 
+	static private final Logger logger = Logger.getLogger(StreamController.class.getName());
+			
 	/**
 	 * The number of queued connect requests that have not been passed to a StreamServer
 	 */
@@ -72,7 +76,7 @@ public class StreamController {
 	}
 
 	protected int registerStream(Stream stream) throws LimitExceededException {
-		log("registerStream");
+		logger.log(Level.FINE,"registerStream");
 		
 		int localStreamId = streams.allocNewStreamId();
 
@@ -115,7 +119,7 @@ public class StreamController {
 			try {
 				while(true) {
 					var connectRequest = connectRequests.take();
-					log("CR in");
+					logger.log(Level.FINER,"CR in");
 					
 					int errorCode = 0; 
 
@@ -144,7 +148,7 @@ public class StreamController {
 							if ( !listener.connectStream(stream) ) {
 								streams.remove(Integer.valueOf(localStreamId));
 								// TODO: log an error message
-								log("server stream not able to handle a connect request");
+								logger.log(Level.WARNING,"server stream not able to handle a connect request");
 							}
 						}
 					} catch (LimitExceededException lee) {
@@ -171,7 +175,7 @@ public class StreamController {
 	 * @param broker
 	 */
 	private void setupBroker(MessageBroker broker) {
-		log("setupBroker");
+		logger.log(Level.FINE,"setupBroker");
 		messageReaderThread = Thread.ofVirtual().start(
 				new MessageReader(
 						(BlockingQueue<PriorityQueueEntry>) broker.getRxQueue(), // it's priority queue entries that come back here
@@ -209,7 +213,7 @@ public class StreamController {
 					var pqe = rxQueue.take();
 					var buffer = pqe.message();
 					
-					log("incoming");
+					logger.log(Level.FINER,"incoming");
 
 					var command = StreamBuffers.getBufferType(buffer);
 
@@ -222,15 +226,15 @@ public class StreamController {
 						if ( stream != null ) {
 							if ( !stream.getPeerIncoming().offer(buffer) ) {
 								// TODO: Log dropping data for backed up stream
-								log("dropping due to backed up stream");
+								logger.log(Level.WARNING,"dropping due to backed up stream");
 								
 							} else {
-								log("data buffer passed to stream on "+stream.getPeerIncoming().hashCode());
-								log("peer incoming used = "+stream.getPeerIncoming().size());
+								logger.log(Level.FINEST,"data buffer passed to stream on "+stream.getPeerIncoming().hashCode());
+								logger.log(Level.FINEST,"peer incoming used = "+stream.getPeerIncoming().size());
 							}
 						} else {
 							// TODO: Log buffer received for non-existant stream
-							log("message for unknown stream discarded");
+							logger.log(Level.WARNING,"message for unknown stream discarded");
 						}
 					}
 
@@ -246,13 +250,8 @@ public class StreamController {
 	}
 
 	public boolean send(BufferData buffer) {
-		log("send");
+		logger.log(Level.FINE,"send");
 		return broker.sendMessage(buffer);
-	}
-
-	private static void log(String text) {
-		System.out.println("StreamController: "+Thread.currentThread().isVirtual()+
-				":"+Thread.currentThread().threadId()+":"+text);
 	}
 
 	/*

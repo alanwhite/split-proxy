@@ -9,6 +9,8 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketImpl;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.naming.LimitExceededException;
 
@@ -20,25 +22,27 @@ import javax.naming.LimitExceededException;
  */
 public class MuxSocketImpl extends SocketImpl {
 
+	static private final Logger logger = Logger.getLogger(MuxSocketImpl.class.getName());
+			
 	private StreamController streamController;
 	private Stream stream;
 	private StreamServer server;
 	
 	@Override
 	public void setOption(int optID, Object value) throws SocketException {
-		log("setOption "+optID);
+		logger.log(Level.FINE,"setOption "+optID);
 
 	}
 
 	@Override
 	public Object getOption(int optID) throws SocketException {
-		log("getOption "+optID);
+		logger.log(Level.FINE,"getOption "+optID);
 		return null;
 	}
 
 	@Override
 	protected void create(boolean stream) throws IOException {
-		log("create "+stream);
+		logger.log(Level.FINE,"create "+stream);
 		if (!stream )
 			throw(new IOException("Only creates Streams"));
 
@@ -48,7 +52,7 @@ public class MuxSocketImpl extends SocketImpl {
 
 	@Override
 	protected void connect(String host, int port) throws IOException {
-		log("connect "+host+":"+port);
+		logger.log(Level.FINE,"connect "+host+":"+port);
 		try {
 			stream.connect(new InetSocketAddress("127.0.0.1",port));
 		} catch (LimitExceededException e) {
@@ -59,7 +63,7 @@ public class MuxSocketImpl extends SocketImpl {
 
 	@Override
 	protected void connect(InetAddress address, int port) throws IOException {
-		log("connect inet "+address.toString()+" "+port);
+		logger.log(Level.FINE,"connect inet "+address.toString()+" "+port);
 		try {
 			stream.connect(new InetSocketAddress("127.0.0.1",port));
 		} catch (LimitExceededException e) {
@@ -70,7 +74,7 @@ public class MuxSocketImpl extends SocketImpl {
 
 	@Override
 	protected void connect(SocketAddress address, int timeout) throws IOException {
-		log("connect sock "+address.toString()+" t:"+timeout);
+		logger.log(Level.FINE,"connect sock "+address.toString()+" t:"+timeout);
 		try {
 //			stream.connect(new InetSocketAddress("127.0.0.1",port), timeout);
 			stream.connect(address, timeout);
@@ -91,7 +95,7 @@ public class MuxSocketImpl extends SocketImpl {
 	 */
 	@Override
 	protected void bind(InetAddress host, int port) throws IOException {
-		log("bind "+port);
+		logger.log(Level.FINE,"bind "+port);
 		if ( server != null ) 
 			throw(new IOException("MuxSocket already bound"));
 
@@ -108,13 +112,13 @@ public class MuxSocketImpl extends SocketImpl {
 	 */
 	@Override
 	protected void listen(int backlog) throws IOException {
-		log("listen "+backlog);
+		logger.log(Level.FINE,"listen "+backlog);
 		// TODO: implement support for variable length list of outstanding connects on a port
 	}
 
 	@Override
 	protected void accept(SocketImpl s) throws IOException {
-		log("accept");
+		logger.log(Level.FINE,"accept");
 		
 		if ( !(s instanceof MuxSocketImpl ))
 			throw(new IOException("Socket passed to MuxSocketImpl.accept() not a MuxSocketImpl"));
@@ -172,17 +176,6 @@ public class MuxSocketImpl extends SocketImpl {
 
 	protected void setStream(Stream stream) {
 		this.stream = stream;
-	}
-	
-	private void log(String m) {
-		System.out.println("MuxSocketImpl: "+Integer.toHexString(this.hashCode())+" :"+ m);
-	}
-
-	@Override
-	protected int getLocalPort() {
-		var p = super.getLocalPort();
-		log("getLocalPort "+p);
-		return p;
 	}
 
 }

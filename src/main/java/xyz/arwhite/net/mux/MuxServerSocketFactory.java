@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.net.ServerSocketFactory;
 
@@ -22,6 +24,8 @@ import javax.net.ServerSocketFactory;
  */
 public class MuxServerSocketFactory extends ServerSocketFactory {
 
+	static private final Logger logger = Logger.getLogger(MuxServerSocketFactory.class.getName());
+			
 	private StreamController streamController;
 	
 	private MuxServerSocketFactory(Builder builder) {
@@ -30,7 +34,7 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 
 	@Override
 	public ServerSocket createServerSocket(int port) throws IOException {
-		log("createServerSocket(p)");
+		logger.log(Level.FINE,"createServerSocket(p)");
 		var s = new MuxServerSocket(new MuxSocketImpl());
 		s.bind(new StreamSocketAddress(streamController, port));
 		return s;
@@ -38,7 +42,7 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 
 	@Override
 	public ServerSocket createServerSocket(int port, int backlog) throws IOException {
-		log("createServerSocket(p,b)");
+		logger.log(Level.FINE,"createServerSocket(p,b)");
 		
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
@@ -50,7 +54,7 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 
 	@Override
 	public ServerSocket createServerSocket(int port, int backlog, InetAddress ifAddress) throws IOException {
-		log("createServerSocket(p,b,ia)");
+		logger.log(Level.FINE,"createServerSocket(p,b,ia)");
 		
 		var s = new MuxServerSocket(new MuxSocketImpl());
 		s.bind(new StreamSocketAddress(streamController,port), backlog);
@@ -77,9 +81,5 @@ public class MuxServerSocketFactory extends ServerSocketFactory {
 		public MuxServerSocketFactory build() {
 			return new MuxServerSocketFactory(this);
 		}
-	}
-
-	private void log(String m) {
-		System.out.println("MuxServerSocketFactory: "+Integer.toHexString(this.hashCode())+" :"+ m);
 	}
 }

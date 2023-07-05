@@ -12,12 +12,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 import javax.naming.LimitExceededException;
 
 import io.helidon.common.buffers.BufferData;
 
 public class Stream {
+	
+	static private final Logger logger = Logger.getLogger(Stream.class.getName());
 
 	/**
 	 * Default timeout on stream
@@ -114,10 +118,6 @@ public class Stream {
 		setPriority(priority);
 		startReceiver(peerIncoming);
 		state = StreamState.CONNECTING;
-		
-		// Set up consumer thread for peerIncoming
-		// setupIncoming(peerIncoming);
-		// maybe needed for when invoked from a listen / accept
 	}
 
 	public Stream(StreamController controller) throws LimitExceededException, IOException {
@@ -133,7 +133,7 @@ public class Stream {
 	 * consumer of this Stream.
 	 */
 	public Stream() {
-		log("Stream");
+		logger.log(Level.FINE,"Stream");
 		
 		// TODO: test buffer increment flow
 		Thread.ofVirtual().start(() -> {
@@ -157,7 +157,7 @@ public class Stream {
 	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
-		log("startReceiver");
+		logger.log(Level.FINE,"startReceiver");
 		
 		Thread.ofVirtual().start(
 				new Incoming(peerIncoming));
@@ -176,16 +176,16 @@ public class Stream {
 			try {
 				boolean halt_receiver = false;
 				while(!halt_receiver) {
-					log("awaiting data "+peerIncoming.hashCode());
+					logger.log(Level.FINEST,"awaiting data "+peerIncoming.hashCode());
 					var buffer = peerIncoming.take();
-					log("incoming");
+					logger.log(Level.FINEST,"incoming");
 					
 					var command = StreamBuffers.getBufferType(buffer);
 					
 					switch( command ) {
 					// what about connect requests .....
 					case StreamBuffers.CONNECT_CONFIRM -> {
-						log("CONNECT_CONFIRM");
+						logger.log(Level.FINEST,"CONNECT_CONFIRM");
 						/*
 						 * If we receive a Connect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -215,7 +215,7 @@ public class Stream {
 
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
-						log("CONNECT_FAIL");
+						logger.log(Level.FINEST,"CONNECT_FAIL");
 						/*
 						 * We have received a Connect Fail in response
 						 * to a Connect Request we sent. The connection
@@ -233,7 +233,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_REQUEST -> {
-						log("DISCONNECT_REQUEST");
+						logger.log(Level.FINEST,"DISCONNECT_REQUEST");
 						/*
 						 * Need to shut down and send confirm
 						 */
@@ -249,7 +249,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_CONFIRM -> {
-						log("DISCONNECT_CONFIRM");
+						logger.log(Level.FINEST,"DISCONNECT_CONFIRM");
 						/*
 						 * If we receive a Disconnect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -275,7 +275,7 @@ public class Stream {
 					}
 					
 					case StreamBuffers.BUFFER_INCREMENT -> {
-						log("BUFFER_INCREMENT");
+						logger.log(Level.FINEST,"BUFFER_INCREMENT");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
@@ -296,16 +296,15 @@ public class Stream {
 					}
 					
 					case StreamBuffers.DATA -> {
-						log("DATA");
+						logger.log(Level.FINEST,"DATA");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
 						if ( state != StreamState.CONNECTED ) {
-							log("State error");
+							logger.log(Level.SEVERE,"State error");
 							streamController.deregisterStream(localId);
 							state = StreamState.ERROR;
 							// disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
-							log("throw error");
 							throw(new IllegalStateException("Invalid state to receive data"));
 						}
 						
@@ -313,21 +312,21 @@ public class Stream {
 						 * Inform the input stream - note 'parse' reads the headers from the buffer and
 						 * positions for reading the actual data
 						 */
-						log("calling writeFromPeer on "+inputStream.hashCode());
+						logger.log(Level.FINEST,"calling writeFromPeer on "+inputStream.hashCode());
 						inputStream.writeFromPeer(StreamBuffers.parseTransmitData(buffer));
 					}
 					
 					default -> {
-						log("default = unknown message type");
+						logger.log(Level.SEVERE,"default = unknown message type");
 					}
 
 					} // switch
 				} // while
 				
-				log("peerIncoming receiver tidily closed");
+				logger.log(Level.FINER,"peerIncoming receiver tidily closed");
 				
 			} catch(InterruptedException | IllegalStateException e) {
-				log("stream terminated by exception");
+				logger.log(Level.SEVERE,"stream terminated by exception");
 				streamController.deregisterStream(localId);
 				state = StreamState.ERROR;
 				e.printStackTrace();
@@ -354,7 +353,7 @@ public class Stream {
 	public void connect(SocketAddress endpoint, int timeout) 
 			throws IOException, LimitExceededException {
 
-		log("connect");
+		logger.log(Level.FINE,"connect");
 		
 //		if ( !(endpoint instanceof StreamSocketAddress) )
 //			throw(new IOException("endpoint must be of type StreamSocketAddress") );
@@ -413,7 +412,7 @@ public class Stream {
 	 * @throws IOException 
 	 */
 	public void close() throws IOException {
-		log("close");
+		logger.log(Level.FINE,"close");
 		
 		// send a disconnect request message
 		// await a disconnect confirm or timeout
@@ -454,11 +453,6 @@ public class Stream {
 	
 	protected void setConnected() {
 		this.state = StreamState.CONNECTED;
-	}
-
-	private static void log(String text) {
-		System.out.println("Stream :"+Thread.currentThread().isVirtual()+
-				":"+Thread.currentThread().threadId()+":"+text);
 	}
 
 	public int getLocalId() {

@@ -5,6 +5,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.net.SocketFactory;
 
@@ -12,6 +14,7 @@ import xyz.arwhite.net.mux.MuxServerSocketFactory.Builder;
 
 public class MuxSocketFactory extends SocketFactory {
 
+	static private final Logger logger = Logger.getLogger(MuxSocketFactory.class.getName());
 	private StreamController streamController;
 	
 	private MuxSocketFactory(Builder builder) {
@@ -20,7 +23,7 @@ public class MuxSocketFactory extends SocketFactory {
 	
 	@Override
 	public Socket createSocket() throws IOException {
-		log("createSocket");
+		logger.log(Level.FINE,"createSocket");
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
 		var s = new MuxSocket(i);
@@ -29,7 +32,8 @@ public class MuxSocketFactory extends SocketFactory {
 	
 	@Override
 	public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
-		log("createSocket(h,p)");
+		logger.log(Level.FINE,"createSocket(h,p)");
+		
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
 		var s = new MuxSocket(i);
@@ -40,12 +44,13 @@ public class MuxSocketFactory extends SocketFactory {
 
 	@Override
 	public Socket createSocket(InetAddress host, int port) throws IOException {
-		log("createSocket(ia,p)");
+		logger.log(Level.FINE,"createSocket(ia,p)");
+		
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
 		var s = new MuxSocket(i);
 		
-		System.err.println("WARNING: MuxSockets ignore InetAddress");
+		logger.log(Level.WARNING,"MuxSockets ignore InetAddress");
 		s.connect(new InetSocketAddress("127.0.0.1",port));
 		return s;
 	}
@@ -53,24 +58,26 @@ public class MuxSocketFactory extends SocketFactory {
 	@Override
 	public Socket createSocket(String host, int port, InetAddress localAddress, int localPort)
 			throws IOException, UnknownHostException {
-		log("createSocket(h,p,ia,lp");
+		logger.log(Level.FINE,"createSocket(h,p,ia,lp");
+		
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
 		var s = new MuxSocket(i);
 		
-		System.err.println("WARNING: MuxSockets ignore InetAddress");
+		logger.log(Level.WARNING,"MuxSockets ignore InetAddress");
 		s.connect(new InetSocketAddress("127.0.0.1",port));
 		return s;
 	}
 
 	@Override
 	public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-		log("createSocket(ia,p,lia,lp");
+		logger.log(Level.FINE,"createSocket(ia,p,lia,lp");
+		
 		var i = new MuxSocketImpl();
 		i.setStreamController(streamController);
 		var s = new MuxSocket(i);
 		
-		System.err.println("WARNING: MuxSockets ignore InetAddress");
+		logger.log(Level.WARNING,"MuxSockets ignore InetAddress");
 		s.connect(new InetSocketAddress("127.0.0.1",port));
 		return s;
 	}
@@ -86,10 +93,6 @@ public class MuxSocketFactory extends SocketFactory {
 		public MuxSocketFactory build() {
 			return new MuxSocketFactory(this);
 		}
-	}
-
-	private void log(String m) {
-		System.out.println("MuxSocketFactory: "+Integer.toHexString(this.hashCode())+" :"+ m);
 	}
 
 }

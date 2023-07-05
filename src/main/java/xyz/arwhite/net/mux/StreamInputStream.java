@@ -7,6 +7,8 @@ import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import xyz.arwhite.net.mux.StreamController.TransmitData;
 
@@ -14,6 +16,8 @@ import xyz.arwhite.net.mux.StreamController.TransmitData;
 
 public class StreamInputStream extends InputStream {
 
+	static private final Logger logger = Logger.getLogger(StreamInputStream.class.getName());
+	
 	private enum BufferMode { READ, WRITE };
 	private BufferMode mode = BufferMode.WRITE;
 	private ByteBuffer transitBuffer;
@@ -34,7 +38,7 @@ public class StreamInputStream extends InputStream {
 	 * @param incoming
 	 */
 	public void writeFromPeer(TransmitData incoming) {
-		log("writeFromPeer");
+		logger.log(Level.FINE,"writeFromPeer");
 		
 		if ( closed )
 			return;
@@ -67,7 +71,7 @@ public class StreamInputStream extends InputStream {
 	 */
 	@Override
 	public int read() throws IOException {
-		log("read()");
+		logger.log(Level.FINE,"read()");
 		
 		if ( closed )
 			throw( new IOException("stream is closed") );
@@ -108,7 +112,7 @@ public class StreamInputStream extends InputStream {
 
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException {
-		log("read(byte[] b, int off, int len)");
+		logger.log(Level.FINE,"read(byte[] b, int off, int len)");
 		
 		if ( closed )
 			throw( new IOException("stream is closed") );
@@ -168,9 +172,6 @@ public class StreamInputStream extends InputStream {
 	public LinkedTransferQueue<Integer> getFreeNotificationQueue() {
 		return freeNotificationQueue;
 	}
-	
-	private void log(String m) {
-		System.out.println("StreamInputStream: "+Integer.toHexString(this.hashCode())+" :"+ m);
-	}
+
 	
 }

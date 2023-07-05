@@ -6,6 +6,8 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /*
  * Here the consumer writes to a mux'd Stream.
@@ -22,6 +24,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class StreamOutputStream extends OutputStream {
 
+	static private final Logger logger = Logger.getLogger(StreamOutputStream.class.getName());
+	
 	private enum BufferMode { READ, WRITE };
 	private BufferMode mode = BufferMode.WRITE;
 	private final ReentrantLock bufferLock = new ReentrantLock();
@@ -40,6 +44,7 @@ public class StreamOutputStream extends OutputStream {
 
 
 	public StreamOutputStream(int capacity, Stream stream) {
+		logger.log(Level.FINE,"StreamOutputStream(c,s)");
 		transitBuffer = ByteBuffer.allocate(capacity);
 		transitAvailableToWrite = new AtomicInteger(capacity);
 		transitAvailableToRead = new AtomicInteger(0);
@@ -62,6 +67,8 @@ public class StreamOutputStream extends OutputStream {
 	 * @param size
 	 */
 	public void increaseRemoteAvailable(int size) {
+		logger.log(Level.FINE,"increaseRemoteAvailable");
+		
 		remoteFreeCapacity.addAndGet(size);
 		
 		try {
@@ -90,7 +97,8 @@ public class StreamOutputStream extends OutputStream {
 	 */
 
 	private void sendFromTransit() throws IOException {
-
+		logger.log(Level.FINE,"sendFromTransit");
+		
 		while( true ) {
 
 			try {
@@ -154,7 +162,8 @@ public class StreamOutputStream extends OutputStream {
 	 * Copy data into transit buffer and signal data available to send
 	 */
 	public void write(int b) throws IOException {
-
+		logger.log(Level.FINE,"write(b)");
+		
 		if ( closed ) 
 			throw( new IOException("stream is closed") );
 
@@ -190,7 +199,8 @@ public class StreamOutputStream extends OutputStream {
 
 	@Override
 	public void write(byte[] b) throws IOException {
-
+		logger.log(Level.FINE,"write([]b)");
+				
 		if ( b == null )
 			throw( new NullPointerException("buffer may not be null") );
 
@@ -202,7 +212,8 @@ public class StreamOutputStream extends OutputStream {
 	 * Copy data into transit buffer and signal data available to send
 	 */
 	public void write(byte[] b, int off, int len) throws IOException {
-
+		logger.log(Level.FINE,"write(b,o,l)");
+		
 		if ( b == null )
 			throw( new NullPointerException("buffer may not be null") );
 
@@ -251,11 +262,13 @@ public class StreamOutputStream extends OutputStream {
 
 	@Override
 	public void close() throws IOException {
+		logger.log(Level.FINE,"close");
 		closed = true;
 	}
 
 	@Override
 	public void flush() throws IOException {
+		logger.log(Level.FINE,"flush");
 		// wait until all transit buffer contents emptied
 	}
 

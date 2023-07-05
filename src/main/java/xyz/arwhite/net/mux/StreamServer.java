@@ -3,11 +3,13 @@ package xyz.arwhite.net.mux;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
-// Analogous to a ServerSocket in the sockets world
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class StreamServer {
 
+	static private final Logger logger = Logger.getLogger(StreamServer.class.getName());
+	
 	/**
 	 * The controller of all IO on the underlying connection supporting the multiplexed streams.
 	 */
@@ -53,7 +55,8 @@ public class StreamServer {
 	 * @param port the logical stream port that this StreamServer listens on
 	 */
 	public StreamServer(StreamController controller, int port) {
-
+		logger.log(Level.FINE,"StreamServer(c,p)");
+		
 		this.controller = controller;
 		this.port = port;
 
@@ -78,7 +81,8 @@ public class StreamServer {
 	 * @return
 	 */
 	public boolean connectStream(Stream stream) {
-
+		logger.log(Level.FINE,"connectStream(s)");
+		
 		var conn = new ConnectionEntry(new CompletableFuture<Void>(), stream);
 
 		if ( connections.offer(conn) ) {
@@ -115,6 +119,8 @@ public class StreamServer {
 
 	 */
 	public Stream accept() throws InterruptedException, ExecutionException {
+		logger.log(Level.FINE,"accept");
+		
 		var conn = connections.take();
 
 		// wait for the connect confirm to be sent
@@ -128,11 +134,15 @@ public class StreamServer {
 	 * Stop new Streams being received on this StreamServers stream port
 	 */
 	public void close() {
+		logger.log(Level.FINE,"close");
+		
 		if ( !controller.deregisterStreamServer(port) ) 
 			throw (new IllegalArgumentException("port not in use"));
 	}
 
 	public int getPort() {
+		logger.log(Level.FINE,"getPort");
+		
 		return port;
 	}
 }

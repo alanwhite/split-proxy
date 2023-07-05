@@ -5,12 +5,16 @@ import java.time.Clock;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import io.helidon.common.buffers.BufferData;
 import io.helidon.nima.websocket.WsSession;
 
 public class WsPriorityMessageHandler extends MessageLinkAdapter {
 
+	static private final Logger logger = Logger.getLogger(WsPriorityMessageHandler.class.getName());
+			
 	private Clock clock;
 	
 	public WsPriorityMessageHandler() {
@@ -27,7 +31,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	
 	@Override
 	public void onOpen(WsSession session) {
-		log("onOpen");
+		logger.log(Level.FINE,"onOpen");
 		
 		this.session = session;
 		
@@ -39,7 +43,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 				started.complete(null);
 				while(true) {
 					var qe = txQueue.take();
-					log("Tx:\n"+qe.message().debugDataHex());
+					logger.log(Level.FINEST,"Tx:\n"+qe.message().debugDataHex());
 					
 					if ( qe.priority() == 0 ) {
 						
@@ -126,7 +130,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	 */
 	@Override
 	public boolean sendMessage(BufferData buffer) {
-		log("sendMessage:\n"+buffer.debugDataHex());
+		logger.log(Level.FINE,"sendMessage:\n"+buffer.debugDataHex());
 		
 		if ( draining )
 			return false;
@@ -150,6 +154,8 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	 * Prevents submission of new messages to the transmit queue, and waits for the queue to be drained
 	 */
 	public void drainTxQueue() {
+		logger.log(Level.FINE,"drainTxQueue");
+		
 		draining = true;
 
 		if ( txStopped != null ) {
@@ -176,14 +182,12 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 
 	@Override
 	public void stop() {
+		logger.log(Level.FINE,"stop");
+		
 		drainTxQueue();
 		session.close(WebSocket.NORMAL_CLOSURE, "Request");
 		// session.terminate();
 		
-	}
-	
-	private void log(String m) {
-		System.out.println("WsPriorityMessageHandler: "+Integer.toHexString(this.hashCode())+" :"+ m);
 	}
 
 }

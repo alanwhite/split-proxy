@@ -1,11 +1,16 @@
 package xyz.arwhite.net.mux;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import io.helidon.nima.webserver.WebServer;
 import io.helidon.nima.websocket.client.WsClient;
 import io.helidon.nima.websocket.webserver.WsRouting;
 
 public class WsMessageLink {
 
+	static private final Logger logger = Logger.getLogger(WsMessageLink.class.getName());
+	
 	// this is the only object that matters and is common
 	// whether the link was launched in client or server mode
 	private MessageLinkAdapter messageBroker;
@@ -14,6 +19,8 @@ public class WsMessageLink {
 	private int localPort;
 
 	private WsMessageLink(Builder builder) {
+		logger.log(Level.FINE,"WsMessageLink");
+		
 		this.messageBroker = builder.messageBroker;
 		this.server = builder.server;
 		this.isServer = server != null;
@@ -25,6 +32,8 @@ public class WsMessageLink {
 	 * Stops the connected WebSocket
 	 */
 	public void stop() {
+		logger.log(Level.FINE,"stop");
+				
 		messageBroker.stop();
 
 		if ( isServer )
@@ -65,7 +74,8 @@ public class WsMessageLink {
 		 * @return
 		 */
 		public WsMessageLink connect() {
-
+			logger.log(Level.FINE,"connect");
+			
 			client = WsClient.builder().build();
 			client.connect("http://"+host+":"+port+"/"+endpoint, messageBroker);
 
@@ -78,7 +88,8 @@ public class WsMessageLink {
 		 * @return
 		 */
 		public WsMessageLink listen() {
-
+			logger.log(Level.FINE,"listen");
+			
 			if ( port == -1 )
 				server = WebServer.builder()
 				.host(this.host)
