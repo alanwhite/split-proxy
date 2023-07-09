@@ -150,6 +150,8 @@ public class MuxSocketImpl extends SocketImpl {
 
 	@Override
 	protected void close() throws IOException {
+		logger.log(Level.FINE,"close");
+		
 		if ( stream != null )
 			stream.close();	
 		

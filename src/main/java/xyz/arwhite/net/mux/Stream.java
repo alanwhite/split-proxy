@@ -133,7 +133,7 @@ public class Stream {
 	 * consumer of this Stream.
 	 */
 	public Stream() {
-		logger.log(Level.FINE,"Stream");
+		logger.fine("Stream");
 		
 		// TODO: test buffer increment flow
 		Thread.ofVirtual().start(() -> {
@@ -157,7 +157,7 @@ public class Stream {
 	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
-		logger.log(Level.FINE,"startReceiver");
+		logger.fine("startReceiver");
 		
 		Thread.ofVirtual().start(
 				new Incoming(peerIncoming));
@@ -176,16 +176,16 @@ public class Stream {
 			try {
 				boolean halt_receiver = false;
 				while(!halt_receiver) {
-					logger.log(Level.FINEST,"awaiting data "+peerIncoming.hashCode());
+					logger.finest("awaiting data "+peerIncoming.hashCode());
 					var buffer = peerIncoming.take();
-					logger.log(Level.FINEST,"incoming");
+					logger.finest("incoming");
 					
 					var command = StreamBuffers.getBufferType(buffer);
 					
 					switch( command ) {
 					// what about connect requests .....
 					case StreamBuffers.CONNECT_CONFIRM -> {
-						logger.log(Level.FINEST,"CONNECT_CONFIRM");
+						logger.finer("CONNECT_CONFIRM");
 						/*
 						 * If we receive a Connect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -215,7 +215,7 @@ public class Stream {
 
 					}
 					case StreamBuffers.CONNECT_FAIL -> {
-						logger.log(Level.FINEST,"CONNECT_FAIL");
+						logger.finer("CONNECT_FAIL");
 						/*
 						 * We have received a Connect Fail in response
 						 * to a Connect Request we sent. The connection
@@ -233,7 +233,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_REQUEST -> {
-						logger.log(Level.FINEST,"DISCONNECT_REQUEST");
+						logger.finer("DISCONNECT_REQUEST");
 						/*
 						 * Need to shut down and send confirm
 						 */
@@ -249,7 +249,7 @@ public class Stream {
 					}
 
 					case StreamBuffers.DISCONNECT_CONFIRM -> {
-						logger.log(Level.FINEST,"DISCONNECT_CONFIRM");
+						logger.finer("DISCONNECT_CONFIRM");
 						/*
 						 * If we receive a Disconnect Confirm while not in a state
 						 * where we're waiting for one this is a sequence error
@@ -275,7 +275,7 @@ public class Stream {
 					}
 					
 					case StreamBuffers.BUFFER_INCREMENT -> {
-						logger.log(Level.FINEST,"BUFFER_INCREMENT");
+						logger.finer("BUFFER_INCREMENT");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
@@ -296,12 +296,12 @@ public class Stream {
 					}
 					
 					case StreamBuffers.DATA -> {
-						logger.log(Level.FINEST,"DATA");
+						logger.finer("DATA");
 						/* 
 						 * Should only receive these if the stream is established
 						 */
 						if ( state != StreamState.CONNECTED ) {
-							logger.log(Level.SEVERE,"State error");
+							logger.severe("State error");
 							streamController.deregisterStream(localId);
 							state = StreamState.ERROR;
 							// disconnectCompleted.complete(StreamConstants.UNEXPECTED_BUFFER_INCREMENT);
@@ -312,18 +312,18 @@ public class Stream {
 						 * Inform the input stream - note 'parse' reads the headers from the buffer and
 						 * positions for reading the actual data
 						 */
-						logger.log(Level.FINEST,"calling writeFromPeer on "+inputStream.hashCode());
+						logger.finest("calling writeFromPeer on "+inputStream.hashCode());
 						inputStream.writeFromPeer(StreamBuffers.parseTransmitData(buffer));
 					}
 					
 					default -> {
-						logger.log(Level.SEVERE,"default = unknown message type");
+						logger.severe("default = unknown message type");
 					}
 
 					} // switch
 				} // while
 				
-				logger.log(Level.FINER,"peerIncoming receiver tidily closed");
+				logger.finer("peerIncoming receiver tidily closed");
 				
 			} catch(InterruptedException | IllegalStateException e) {
 				logger.log(Level.SEVERE,"stream terminated by exception");
@@ -353,7 +353,7 @@ public class Stream {
 	public void connect(SocketAddress endpoint, int timeout) 
 			throws IOException, LimitExceededException {
 
-		logger.log(Level.FINE,"connect");
+		logger.fine("connect");
 		
 //		if ( !(endpoint instanceof StreamSocketAddress) )
 //			throw(new IOException("endpoint must be of type StreamSocketAddress") );
@@ -412,7 +412,7 @@ public class Stream {
 	 * @throws IOException 
 	 */
 	public void close() throws IOException {
-		logger.log(Level.FINE,"close");
+		logger.fine("close");
 		
 		// send a disconnect request message
 		// await a disconnect confirm or timeout

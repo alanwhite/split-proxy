@@ -1,5 +1,7 @@
 package xyz.arwhite.net.mux;
 
+import java.util.logging.*;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -19,13 +21,19 @@ import org.junit.jupiter.api.Test;
 
 class IntegrationTests {
 
-//	@Test
-//	void defaultPattern() throws IOException, InterruptedException {
-//		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault(),100);
-//	}
+	@Test
+	void defaultPattern() throws IOException, InterruptedException {
+		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault(),1);
+	}
 
 	@Test
 	void testMux() throws IOException, InterruptedException {
+		
+		var logger = Logger.getLogger("xyz.arwhite.net");
+		var c = new ConsoleHandler();
+		logger.addHandler(c);
+		c.setLevel(Level.FINEST);
+		logger.setLevel(Level.FINER);
 		
 		var serverHandler = new WsPriorityMessageHandler();
 		var wsServerLink = new WsMessageLink.Builder()
@@ -55,7 +63,13 @@ class IntegrationTests {
 				.withMux(linkClientMux)
 				.build();
 		
-		testPattern(muxServerSocketFactory,muxSocketFactory,20);
+//		var logM = LogManager.getLogManager();
+//		logM.getLoggerNames().asIterator().forEachRemaining(s -> System.out.println(s));
+
+
+		
+		
+		testPattern(muxServerSocketFactory,muxSocketFactory,1);
 	}
 
 	private void testPattern(ServerSocketFactory serverFactory, SocketFactory clientFactory, int iterations) 
@@ -72,10 +86,11 @@ class IntegrationTests {
 					log("Server Accepted Connection");
 					Thread.ofVirtual().start(() -> {
 						try {
-							log("Server Handling Accepted Connection");
+							log("Server Reading Hello");
 							assertEquals(1, sock.getInputStream().read());
 							log("Server Writing Response");
 							sock.getOutputStream().write(2);
+							log("Server Closing Connection");
 							sock.close();
 						} catch (IOException e) {
 							e.printStackTrace();
@@ -100,8 +115,10 @@ class IntegrationTests {
 				var client = clientFactory.createSocket("127.0.0.1", port);
 				log("Client Writing Hello");
 				client.getOutputStream().write(1);
+				log("Client Reading Response");
 				assertEquals(2, client.getInputStream().read());
 				log("Client Done");
+				// client.close();
 				return System.nanoTime() - start;
 			});
 

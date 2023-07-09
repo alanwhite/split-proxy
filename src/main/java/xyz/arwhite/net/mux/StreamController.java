@@ -11,6 +11,15 @@ import javax.naming.LimitExceededException;
 
 import io.helidon.common.buffers.BufferData;
 
+/**
+ * Controller for all Streams on the underlying transport. All client and server streams are
+ * registered and deregistered here, all IO is through here.
+ * 
+ * Logging strategy is general flow visible through FINE, method entry/exit is finer, debug is FINEST
+ * 
+ * @author Alan R. White
+ *
+ */
 public class StreamController {
 
 	static private final Logger logger = Logger.getLogger(StreamController.class.getName());
@@ -22,6 +31,7 @@ public class StreamController {
 
 	private MessageBroker broker;
 	private Thread messageReaderThread;
+	private Thread connectDispatcherThread;
 
 	public record ConnectRequest(int priority, int remoteId, int streamPort, BufferData buffer ) {};
 	public record ConnectConfirm(int priority, int localId, int remoteId) {};
@@ -43,12 +53,17 @@ public class StreamController {
 	 * @param broker
 	 */
 	private StreamController(MessageBroker broker) {
+		logger.entering(this.getClass().getName(), "StreamController", broker);
+		
 		this.broker = broker;
 
-		streams = new StreamMap();
-
-		setupConnectDispatcher(connectRequests);
+		this.streams = new StreamMap();
+		setupConnectDispatcher(this.connectRequests);
 		setupBroker(this.broker);
+		
+		logger.fine("StreamController initialized");
+		
+		logger.exiting(this.getClass().getName(), "StreamController");	
 	}
 
 	// Testing purposes only .... Grrrr
@@ -63,7 +78,16 @@ public class StreamController {
 	 * @return true if successfully registered, false if the port is already in use 
 	 */
 	public boolean registerStreamServer(int port, StreamServer server) {
-		return streamPorts.putIfAbsent(port, server) == null;
+		logger.entering(this.getClass().getName(), "registerStreamServer", 
+				new Object[] { Integer.valueOf(port), server });
+		
+		var outcome = streamPorts.putIfAbsent(port, server) == null;
+		
+		if ( outcome )
+			logger.fine("StreamServer now listening on StreamPort "+port);
+		
+		logger.exiting(this.getClass().getName(), "registerStreamServer", outcome);
+		return outcome;
 	}
 
 	/**
@@ -72,32 +96,58 @@ public class StreamController {
 	 * @return true if a StreamServer was removed, false if the port is not in use
 	 */
 	public boolean deregisterStreamServer(int port) {
-		return streamPorts.remove(port) != null;
+		logger.entering(this.getClass().getName(), "deregisterStreamServer", port);
+		
+		var outcome = streamPorts.remove(port) != null;
+		
+		if ( outcome )
+			logger.fine("StreamPort "+port+" now unused");
+		
+		logger.exiting(this.getClass().getName(), "deregisterStreamServer", outcome);		
+		return outcome;
 	}
 
+	/**
+	 * Registers a new Stream
+	 *  
+	 * @param stream
+	 * @return
+	 * @throws LimitExceededException if we've maxed number of possible Streams
+	 */
 	protected int registerStream(Stream stream) throws LimitExceededException {
-		logger.log(Level.FINE,"registerStream");
+		logger.entering(this.getClass().getName(), "registerStream", stream);
 		
 		int localStreamId = streams.allocNewStreamId();
 
-		// add entry to Streams map 
 		streams.put(Integer.valueOf(localStreamId), stream); 
 
+		logger.fine("New Stream with local ID "+localStreamId);
+		
+		logger.exiting(this.getClass().getName(), "registerStream", localStreamId);
 		return localStreamId;
 	}
 
 	protected boolean deregisterStream(int stream) {
-
-		var result = streams.remove(stream) != null;
-		if ( result )
+		logger.entering(this.getClass().getName(), "deregisterStream", stream);
+		
+		var outcome = streams.remove(stream) != null;
+		if ( outcome ) {
 			streams.freeStreamId(stream);
-
-		return result;
+			logger.fine("Stream "+stream+" now unused");
+		}
+		
+		logger.exiting(this.getClass().getName(), "deregisterStream", outcome);
+		return outcome;
 	}
 
 	private void setupConnectDispatcher(ArrayBlockingQueue<ConnectRequest> connectRequests) {
-		Thread.ofVirtual().start(
+		logger.entering(this.getClass().getName(), "setupConnectDispatcher", connectRequests);
+		
+		connectDispatcherThread = Thread.ofVirtual().name("Connect Dispatcher").start(
 				new ConnectDispatcher(connectRequests));
+	
+		logger.exiting(this.getClass().getName(), "registerStream", connectDispatcherThread);
+	
 	}
 
 	/**
@@ -111,7 +161,11 @@ public class StreamController {
 		private BlockingQueue<ConnectRequest> connectRequests;
 
 		public ConnectDispatcher(BlockingQueue<ConnectRequest> connectRequests) {
+			logger.entering(this.getClass().getName(), "Constructor", connectRequests);
+			
 			this.connectRequests = connectRequests;
+
+			logger.exiting(this.getClass().getName(), "Constructor");
 		}
 
 		@Override
@@ -119,12 +173,10 @@ public class StreamController {
 			try {
 				while(true) {
 					var connectRequest = connectRequests.take();
-					logger.log(Level.FINER,"CR in");
+					logger.fine("Processing Connect Request on Stream Port "+connectRequest.streamPort);
 					
 					int errorCode = 0; 
-
 					try { 
-
 						var listener = streamPorts.get(connectRequest.streamPort);
 
 						if ( listener == null ) {
@@ -135,8 +187,13 @@ public class StreamController {
 							 * We are processing a Connect Request received from a remote
 							 * peer. The Connect Request informs us of the peers localID
 							 * which to us is the remoteID for the Stream created.
+							 * 
+							 * //TODO: refactor so we reuse registerStream above
 							 */
+							logger.finest("ConnectRequest: Priority="+connectRequest.priority+" RemoteId="+connectRequest.remoteId);
+							
 							int localStreamId = streams.allocNewStreamId();
+							logger.finest("Allocated localStreamId "+localStreamId);
 
 							// create Stream object for this connection, containing the local and remote streamIds
 							var stream = new Stream(StreamController.this, localStreamId, connectRequest.remoteId, connectRequest.priority);
@@ -145,10 +202,11 @@ public class StreamController {
 							streams.put(Integer.valueOf(localStreamId), stream); 
 
 							// pass the stream object to the listener
-							if ( !listener.connectStream(stream) ) {
+							if ( listener.connectStream(stream) ) {
+								logger.fine("New Stream with local ID "+localStreamId);
+							} else {
 								streams.remove(Integer.valueOf(localStreamId));
-								// TODO: log an error message
-								logger.log(Level.WARNING,"server stream not able to handle a connect request");
+								logger.log(Level.WARNING,"server stream not able to handle incoming Connect Request");
 							}
 						}
 					} catch (LimitExceededException lee) {
@@ -172,23 +230,26 @@ public class StreamController {
 	@SuppressWarnings("unchecked")
 	/**
 	 * Note: assumes that the Queue in the MessageBroker is a BlockingQueue
+	 * TODO: refactor for when underlying transport provides other queue type
 	 * @param broker
 	 */
 	private void setupBroker(MessageBroker broker) {
-		logger.log(Level.FINE,"setupBroker");
-		messageReaderThread = Thread.ofVirtual().start(
+		logger.entering(this.getClass().getName(), "setupBroker", broker);
+		
+		messageReaderThread = Thread.ofVirtual()
+				.name("MessageReader")
+				.start(
 				new MessageReader(
-						(BlockingQueue<PriorityQueueEntry>) broker.getRxQueue(), // it's priority queue entries that come back here
+						(BlockingQueue<PriorityQueueEntry>) broker.getRxQueue(), 
 						connectRequests));
 
+		logger.exiting(this.getClass().getName(), "setupBroker", messageReaderThread);
 	}
 
 	/**
-	 * Assumed message format:
-	 * byte 0 is priority
-	 * byte 1 is the local stream id
-	 * byte 2 is the message type
-	 * byte 3+ is message specific properties / data
+	 * Dispatches all incoming messages from the underlying transport to the appropriate
+	 * stream unless the message is a connect request, in which case that's queued for
+	 * processing on the connect handler thread.
 	 * 
 	 * @author Alan R. White
 	 *
@@ -202,56 +263,70 @@ public class StreamController {
 				BlockingQueue<PriorityQueueEntry> rxQueue, 
 				BlockingQueue<ConnectRequest> connectRequests) {
 
+			logger.entering(this.getClass().getName(), "Constructor",
+					new Object[] { rxQueue, connectRequests });
+			
 			this.rxQueue = rxQueue;
 			this.connectRequests = connectRequests;
+			
+			logger.exiting(this.getClass().getName(), "Constructor");
 		}
 
 		@Override
 		public void run() {
+			logger.entering(this.getClass().getName(), "run");
 			try {
 				while(true) {
 					var pqe = rxQueue.take();
 					var buffer = pqe.message();
 					
-					logger.log(Level.FINER,"incoming");
-
 					var command = StreamBuffers.getBufferType(buffer);
 
+					logger.finest("Incoming buffer of type "+command);
+					
 					// must dispatch without blocking
 					if ( command == StreamBuffers.CONNECT_REQUEST ) {
-						// TODO: log error if too many outstanding connect requests
-						connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
+						var outcome = connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
+						
+						if ( !outcome )
+							logger.warning("Could not queue Connect Request due to overrun");
+						
 					} else {
-						var stream = streams.get(StreamBuffers.getStreamId(buffer));
+						var localStreamId = StreamBuffers.getStreamId(buffer);
+						var stream = streams.get(localStreamId);
+						
 						if ( stream != null ) {
 							if ( !stream.getPeerIncoming().offer(buffer) ) {
-								// TODO: Log dropping data for backed up stream
-								logger.log(Level.WARNING,"dropping due to backed up stream");
+								logger.warning("Dropping buffer due to Stream " + localStreamId + " being backed up");
 								
 							} else {
-								logger.log(Level.FINEST,"data buffer passed to stream on "+stream.getPeerIncoming().hashCode());
-								logger.log(Level.FINEST,"peer incoming used = "+stream.getPeerIncoming().size());
+								logger.finest("Data buffer passed to Stream " + localStreamId);
+								logger.finest("Peer incoming used = "+stream.getPeerIncoming().size());
 							}
 						} else {
-							// TODO: Log buffer received for non-existant stream
-							logger.log(Level.WARNING,"message for unknown stream discarded");
+							logger.warning("Buffer for unknown Stream " + localStreamId + " discarded");
 						}
 					}
 
 				}
+				
+				// TODO: tidy exit .... logger.exiting(this.getClass().getName(), "run");
 
 			} catch (InterruptedException e) {
 				// TODO: maybe interruption is OK, means terminate 
 				throw new RuntimeException(e);
 			}
-
 		}
 
 	}
 
 	public boolean send(BufferData buffer) {
-		logger.log(Level.FINE,"send");
-		return broker.sendMessage(buffer);
+		logger.entering(this.getClass().getName(), "send", buffer);
+		
+		var outcome = broker.sendMessage(buffer);
+		
+		logger.exiting(this.getClass().getName(), "send", outcome);
+		return outcome ;
 	}
 
 	/*
