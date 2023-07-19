@@ -42,8 +42,21 @@ public class StreamBuffers {
 	public static final byte DISCONNECT_CONFIRM = 5;
 	public static final byte DATA = 6;
 	public static final byte BUFFER_INCREMENT = 7;
+	public static final byte PRIORITY_SHUTDOWN = 0;
 
+	/**
+	 * Inspects the the first byte to see if the priority is 0. As no stream can have a priority 
+	 * of 0 this indicates that the underlying transport is closing down. No more data can be
+	 * sent or received.
+	 * 
+	 * @param buffer
+	 * @return the buffer type, or 0 if the transport is closing down.
+	 */
 	public static int getBufferType(BufferData buffer) {
+		var priority = buffer.get(0);
+		if ( priority == PRIORITY_SHUTDOWN )
+			return PRIORITY_SHUTDOWN;
+		
 		return buffer.get(2);
 	}
 

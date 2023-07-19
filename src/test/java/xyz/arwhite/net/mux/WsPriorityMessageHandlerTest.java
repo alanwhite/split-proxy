@@ -363,4 +363,98 @@ class WsPriorityMessageHandlerTest {
 		// order is unpredictable due to timing between threads
 	}
 	
+	
+	// ensure that when stop() is called locally that it informs all
+	
+	@Test
+	@DisplayName("Controlled Stop")
+	void testStop() throws InterruptedException {
+
+		var moclock = TestClock.fixed(Instant.EPOCH, ZoneId.systemDefault());
+		var mb = new WsPriorityMessageHandler(moclock);
+		ArrayList<BufferData> bufList = new ArrayList<>();
+		ArrayList<Boolean> closeList = new ArrayList<>();
+		
+		mb.onOpen(new WsSession() {
+
+			@Override
+			public WsSession send(String text, boolean last) {
+				return null;
+			}
+
+			@Override
+			public WsSession send(BufferData bufferData, boolean last) {
+				bufList.add(bufferData);
+				return this;
+			}
+
+			@Override
+			public WsSession ping(BufferData bufferData) {
+				return null;
+			}
+
+			@Override
+			public WsSession pong(BufferData bufferData) {
+				return null;
+			}
+
+			@Override
+			public WsSession close(int code, String reason) {
+				closeList.add(true);
+				return null;
+			}
+
+			@Override
+			public WsSession terminate() {
+				return null;
+			}
+			
+		});
+
+		Thread.sleep(Duration.ofSeconds(1));
+		
+		var msg1 = BufferData.create(16);
+		msg1.writeInt8(3);
+		assertTrue(mb.sendMessage(msg1));
+		
+		var msg2 = BufferData.create(16);
+		msg2.writeInt8(3);
+		assertTrue(mb.sendMessage(msg2));
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg3 = BufferData.create(16);
+		msg3.writeInt8(1);
+		assertTrue(mb.sendMessage(msg3));
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg4 = BufferData.create(16);
+		msg4.writeInt8(2);
+		assertTrue(mb.sendMessage(msg4));
+		
+		var msg5 = BufferData.create(16);
+		msg5.writeInt8(3);
+		assertTrue(mb.sendMessage(msg5));
+		
+		var msg6 = BufferData.create(16);
+		msg6.writeInt8(3);
+		assertTrue(mb.sendMessage(msg6));
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg7 = BufferData.create(16);
+		msg7.writeInt8(1);
+		assertTrue(mb.sendMessage(msg7));
+		
+		moclock.fastForward(Duration.ofMillis(1));
+		var msg8 = BufferData.create(16);
+		msg8.writeInt8(2);
+		assertTrue(mb.sendMessage(msg8));
+	
+		mb.stop();
+		
+		assertEquals(1,closeList.size());
+		assertEquals(8,bufList.size());
+		
+		// order is unpredictable due to timing between threads
+	}
+	
 }

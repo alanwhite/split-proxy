@@ -275,6 +275,7 @@ public class StreamController {
 		@Override
 		public void run() {
 			logger.entering(this.getClass().getName(), "run");
+			
 			try {
 				while(true) {
 					var pqe = rxQueue.take();
@@ -285,13 +286,20 @@ public class StreamController {
 					logger.finest("Incoming buffer of type "+command);
 					
 					// must dispatch without blocking
-					if ( command == StreamBuffers.CONNECT_REQUEST ) {
+					
+					switch( command ) {
+					case StreamBuffers.PRIORITY_SHUTDOWN -> {
+						// tell all Streams they're dead
+					}
+					
+					case StreamBuffers.CONNECT_REQUEST -> {
 						var outcome = connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
 						
 						if ( !outcome )
 							logger.warning("Could not queue Connect Request due to overrun");
-						
-					} else {
+					}
+					
+					default -> {
 						var localStreamId = StreamBuffers.getStreamId(buffer);
 						var stream = streams.get(localStreamId);
 						
@@ -307,6 +315,30 @@ public class StreamController {
 							logger.warning("Buffer for unknown Stream " + localStreamId + " discarded");
 						}
 					}
+					}
+					
+//					if ( command == StreamBuffers.CONNECT_REQUEST ) {
+//						var outcome = connectRequests.offer(StreamBuffers.parseConnectRequest(buffer));
+//						
+//						if ( !outcome )
+//							logger.warning("Could not queue Connect Request due to overrun");
+//						
+//					} else {
+//						var localStreamId = StreamBuffers.getStreamId(buffer);
+//						var stream = streams.get(localStreamId);
+//						
+//						if ( stream != null ) {
+//							if ( !stream.getPeerIncoming().offer(buffer) ) {
+//								logger.warning("Dropping buffer due to Stream " + localStreamId + " being backed up");
+//								
+//							} else {
+//								logger.finest("Data buffer passed to Stream " + localStreamId);
+//								logger.finest("Peer incoming used = "+stream.getPeerIncoming().size());
+//							}
+//						} else {
+//							logger.warning("Buffer for unknown Stream " + localStreamId + " discarded");
+//						}
+//					}
 
 				}
 				

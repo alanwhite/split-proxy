@@ -31,7 +31,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	
 	@Override
 	public void onOpen(WsSession session) {
-		logger.log(Level.FINE,"onOpen");
+		logger.entering(this.getClass().getName(), "onOpen", session);
 		
 		this.session = session;
 		
@@ -43,6 +43,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 				started.complete(null);
 				while(true) {
 					var qe = txQueue.take();
+					logger.fine("Transmit message on WebSocket p="+qe.priority()+", t="+qe.timestamp()+", s="+qe.sequence());
 					logger.log(Level.FINEST,"Tx:\n"+qe.message().debugDataHex());
 					
 					if ( qe.priority() == 0 ) {
@@ -67,15 +68,32 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        
+        logger.exiting(this.getClass().getName(), "onOpen");
 	}
 	
+	/**
+	 * We've received a close message either remotely or locally initiated. 
+	 * No point sending any more data. Inform all local consumers that we're done.
+	 */
 	@Override
 	public void onClose(WsSession session, int status, String reason) {
+		logger.entering(this.getClass().getName(), "onClose", status);
+		
+		// close the sender thread
 		if ( txQueueSender != null )
 			txQueueSender.interrupt();
 		
 		txQueueSender = null;
-		//?? session.terminate();
+		
+		// tell listening StreamController we're done
+		var command = BufferData.create(1);
+		command.writeInt8(0);
+		rxQueue.add(new PriorityQueueEntry((byte) 0,clock.millis(),0,command));
+		
+		// should wait so things can get closed down .....
+		
+		logger.exiting(this.getClass().getName(), "onClose");
 	}
 
 	/*
@@ -92,7 +110,8 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	 * Creates and stores a PriorityBasedQueue entry and submits
 	 */
 	public void onMessage(WsSession session, BufferData buffer, boolean last) {
-
+		logger.entering(this.getClass().getName(), "onMessage", buffer);
+		
 		var now = clock.millis();
 		
 		if ( now == lastRxMessageTime ) 
@@ -102,8 +121,11 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 			rxSequence = 0;
 		}
 		
+		logger.fine("adding received message to receive queue");
 		rxQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,rxSequence,buffer));
 		
+
+		logger.exiting(this.getClass().getName(), "onMessage");
 	}
 
 	@Override
@@ -132,6 +154,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	public boolean sendMessage(BufferData buffer) {
 		logger.log(Level.FINE,"sendMessage:\n"+buffer.debugDataHex());
 		
+		logger.fine("Queueing message for WebSocket");
 		if ( draining )
 			return false;
 		
@@ -147,14 +170,18 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 			txSequence = 0;
 		}
 		
-		return txQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,txSequence,buffer));
+		var outcome =  txQueue.add(new PriorityQueueEntry((byte) buffer.get(0),now,txSequence,buffer));
+		
+		logger.exiting(this.getClass().getName(), "sendMessage", outcome);
+		return outcome;
 	}
 	
 	/**
 	 * Prevents submission of new messages to the transmit queue, and waits for the queue to be drained
 	 */
 	public void drainTxQueue() {
-		logger.log(Level.FINE,"drainTxQueue");
+		logger.entering(this.getClass().getName(), "drainTxQueue", session);
+		logger.log(Level.FINE,"blocking future sending and queuing command to Tx thread to drain");
 		
 		draining = true;
 
@@ -169,6 +196,9 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 				throw new RuntimeException(e);
 			}
 		}
+		
+
+		logger.exiting(this.getClass().getName(), "drainTxQueue");
 	}
 
 	@Override
@@ -180,14 +210,20 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 		return txQueue;
 	}
 
+	/**
+	 * We've been told to close down locally.
+	 * Send whatever messages are queued, ensuring new ones can't be added.
+	 * Informing local consumers that we're closing happens in onClose.
+	 */
 	@Override
 	public void stop() {
+		logger.entering(this.getClass().getName(), "stop");
 		logger.log(Level.FINE,"stop");
 		
 		drainTxQueue();
 		session.close(WebSocket.NORMAL_CLOSURE, "Request");
-		// session.terminate();
-		
+
+		logger.exiting(this.getClass().getName(), "stop");
 	}
 
 }

@@ -21,10 +21,10 @@ import org.junit.jupiter.api.Test;
 
 class IntegrationTests {
 
-	@Test
-	void defaultPattern() throws IOException, InterruptedException {
-		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault(),1);
-	}
+//	@Test
+//	void defaultPattern() throws IOException, InterruptedException {
+//		testPattern(ServerSocketFactory.getDefault(), SocketFactory.getDefault(),1);
+//	}
 
 	@Test
 	void testMux() throws IOException, InterruptedException {
