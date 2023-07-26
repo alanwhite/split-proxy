@@ -53,7 +53,7 @@ public class StreamController {
 	 * @param broker
 	 */
 	private StreamController(MessageBroker broker) {
-		logger.entering(this.getClass().getName(), "StreamController", broker);
+		logger.entering(this.getClass().getName(), "Constructor", broker);
 		
 		this.broker = broker;
 
@@ -63,12 +63,13 @@ public class StreamController {
 		
 		logger.fine("StreamController initialized");
 		
-		logger.exiting(this.getClass().getName(), "StreamController");	
+		logger.exiting(this.getClass().getName(), "Constructor");	
 	}
 
-	// Testing purposes only .... Grrrr
+	// Testing purposes only .... Grrrr FIXME
 	public StreamController() {
-		// TODO Auto-generated constructor stub
+		logger.entering(this.getClass().getName(), "Constructor");
+		logger.exiting(this.getClass().getName(), "Constructor");
 	}
 
 	/**
@@ -289,7 +290,8 @@ public class StreamController {
 					
 					switch( command ) {
 					case StreamBuffers.PRIORITY_SHUTDOWN -> {
-						// tell all Streams they're dead
+						streamPorts.forEach((port, streamServer) -> streamServer.close());
+						streams.forEach((streamId, stream) -> stream.stop());
 					}
 					
 					case StreamBuffers.CONNECT_REQUEST -> {

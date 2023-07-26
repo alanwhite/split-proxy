@@ -16,18 +16,53 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	static private final Logger logger = Logger.getLogger(WsPriorityMessageHandler.class.getName());
 			
 	private Clock clock;
+	private WsSession session;
+
+	private CompletableFuture<Void> txStopped;
+	private PriorityBlockingQueue<PriorityQueueEntry> rxQueue;
+	private long lastRxMessageTime = 0;
+	private int rxSequence = 0;
+	
+	private Thread txQueueSender;
+	private PriorityBlockingQueue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+	private long lastTxMessageTime = 0;
+	private int txSequence = 0;
+	private boolean draining = false;
 	
 	public WsPriorityMessageHandler() {
 		this(Clock.systemDefaultZone());
 	}
 	
 	protected WsPriorityMessageHandler(Clock clock) {
+		rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
+		txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
 		this.clock = clock;
 	}
 	
-	private WsSession session;
-	private Thread txQueueSender;
-	private CompletableFuture<Void> txStopped;
+	private WsPriorityMessageHandler(Builder builder) {
+		rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(builder.receiveQueueDepth);
+		txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(builder.transmitQueueDepth);
+	}
+	
+	public class Builder {
+		
+		int receiveQueueDepth = 64;
+		int transmitQueueDepth = 64;
+		
+		public Builder withReceiveQueueDepth(int receiveQueueDepth) {
+			this.receiveQueueDepth = receiveQueueDepth;
+			return this;
+		}
+		
+		public Builder withTransmitQueueDepth(int transmitQueueDepth) {
+			this.transmitQueueDepth = transmitQueueDepth;
+			return this;
+		}
+		
+		public WsPriorityMessageHandler build() {
+			return new WsPriorityMessageHandler(this);
+		}
+	}
 	
 	@Override
 	public void onOpen(WsSession session) {
@@ -64,7 +99,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 		});
 			
         try {
-            started.toCompletableFuture().get();
+            started.toCompletableFuture().get(); // TODO: check why toCompletableFuture is called
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -99,10 +134,6 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	/*
 	 * Receiving messages from the WebSocket
 	 */
-	
-	private PriorityBlockingQueue<PriorityQueueEntry> rxQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
-	private long lastRxMessageTime = 0;
-	private int rxSequence = 0;
 	
 	@Override
 	/**
@@ -140,11 +171,7 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 	/*
 	 * Sending messages to the WebSocket
 	 */
-	
-	private PriorityBlockingQueue<PriorityQueueEntry> txQueue = new PriorityBlockingQueue<PriorityQueueEntry>(64);
-	private long lastTxMessageTime = 0;
-	private int txSequence = 0;
-	private boolean draining = false;
+
 	
 	/**
 	 * Used to queue a message to be transmitted. Priority is specified in the first byte of the BufferData.
@@ -197,7 +224,6 @@ public class WsPriorityMessageHandler extends MessageLinkAdapter {
 			}
 		}
 		
-
 		logger.exiting(this.getClass().getName(), "drainTxQueue");
 	}
 

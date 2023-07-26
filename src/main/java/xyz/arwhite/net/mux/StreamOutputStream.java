@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 public class StreamOutputStream extends OutputStream {
 
 	static private final Logger logger = Logger.getLogger(StreamOutputStream.class.getName());
-	
+
 	private enum BufferMode { READ, WRITE };
 	private BufferMode mode = BufferMode.WRITE;
 	private final ReentrantLock bufferLock = new ReentrantLock();
@@ -35,6 +35,7 @@ public class StreamOutputStream extends OutputStream {
 	private Condition spaceAvailableToWrite = bufferLock.newCondition();
 	private AtomicInteger transitAvailableToRead;
 	private Condition dataAvailableToRead = bufferLock.newCondition();
+	private Thread sendFromTransitThread;
 
 	private boolean closed = false;
 	private AtomicInteger remoteFreeCapacity = new AtomicInteger(4096);
@@ -44,15 +45,17 @@ public class StreamOutputStream extends OutputStream {
 
 
 	public StreamOutputStream(int capacity, Stream stream) {
-		logger.log(Level.FINE,"StreamOutputStream(c,s)");
+		logger.entering(this.getClass().getName(), "Constructor", 
+				new Object[] { Integer.valueOf(capacity), stream });
+
 		transitBuffer = ByteBuffer.allocate(capacity);
 		transitAvailableToWrite = new AtomicInteger(capacity);
 		transitAvailableToRead = new AtomicInteger(0);
-		
+
 		this.stream = stream;
 
 		// start the virtual thread that waits for data to be in the transit buffer
-		Thread.ofVirtual().start(() -> {
+		this.sendFromTransitThread = Thread.ofVirtual().start(() -> {
 			try {
 				sendFromTransit();
 			} catch (IOException e) {
@@ -60,6 +63,7 @@ public class StreamOutputStream extends OutputStream {
 			}
 		});
 
+		logger.exiting(this.getClass().getName(), "Constructor");
 	}
 
 	/**
@@ -67,16 +71,18 @@ public class StreamOutputStream extends OutputStream {
 	 * @param size
 	 */
 	public void increaseRemoteAvailable(int size) {
-		logger.log(Level.FINE,"increaseRemoteAvailable");
-		
+		logger.entering(this.getClass().getName(), "increaseRemoteAvailable", size);
+
 		remoteFreeCapacity.addAndGet(size);
-		
+
 		try {
 			bufferLock.lock();
 			remoteBufferHasFreeCapacity.signalAll();
 		} finally {
 			bufferLock.unlock();
 		}
+
+		logger.exiting(this.getClass().getName(), "increaseRemoteAvailable");
 	}
 
 	/*
@@ -97,89 +103,100 @@ public class StreamOutputStream extends OutputStream {
 	 */
 
 	private void sendFromTransit() throws IOException {
-		logger.log(Level.FINE,"sendFromTransit");
-		
-		while( true ) {
+		logger.entering(this.getClass().getName(), "sendFromTransit");
 
-			try {
-				bufferLock.lock();
+		try {
+			while( true ) {
+				try {
+					bufferLock.lock();
 
-				// only bother waking up if we can send anything
-				while ( remoteFreeCapacity.get() < 1 )
-					remoteBufferHasFreeCapacity.await();
+					// only bother waking up if we can send anything
+					while ( remoteFreeCapacity.get() < 1 )
+						remoteBufferHasFreeCapacity.await();
 
-				// then wait for something to send
-				while ( transitAvailableToRead.get() < 1 )
-					dataAvailableToRead.await();
+					// then wait for something to send
+					while ( transitAvailableToRead.get() < 1 )
+						dataAvailableToRead.await();
 
-				if ( mode != BufferMode.READ ) {
-					mode = BufferMode.READ;
-					transitBuffer.flip();
-				}	
+					if ( mode != BufferMode.READ ) {
+						mode = BufferMode.READ;
+						transitBuffer.flip();
+					}	
 
-				// logTransitProps("Before Offloading");
-				
-				// limit sending to whatever the remote end can take
-				int bytesRead = remoteFreeCapacity.get();
+					// logTransitProps("Before Offloading");
 
-				// then reduce if it's less than the data in the transit buffer
-				// an optimization might be to loop here to drain as there's
-				// capacity at the remote end to take it ...
-				if ( bytesRead > transitBuffer.remaining() )
-					bytesRead = transitBuffer.remaining();
+					// limit sending to whatever the remote end can take
+					int bytesRead = remoteFreeCapacity.get();
 
-				stream.sendData(transitBuffer, bytesRead);
-				// logTransitProps("After Send");
-				
-				remoteFreeCapacity.addAndGet(-bytesRead);
-				transitAvailableToRead.addAndGet(-bytesRead);
+					// then reduce if it's less than the data in the transit buffer
+					// an optimization might be to loop here to drain as there's
+					// capacity at the remote end to take it ...
+					if ( bytesRead > transitBuffer.remaining() )
+						bytesRead = transitBuffer.remaining();
 
-				transitAvailableToWrite.addAndGet(bytesRead);
-				spaceAvailableToWrite.signalAll();
+					stream.sendData(transitBuffer, bytesRead);
+					// logTransitProps("After Send");
 
-			} catch (InterruptedException e) {
-				throw( new IOException(e) );
+					remoteFreeCapacity.addAndGet(-bytesRead);
+					transitAvailableToRead.addAndGet(-bytesRead);
 
-			} finally {
-				// logTransitProps("After Offloading");
-				bufferLock.unlock();
+					transitAvailableToWrite.addAndGet(bytesRead);
+					spaceAvailableToWrite.signalAll();
+
+				} finally {
+					// logTransitProps("After Offloading");
+					bufferLock.unlock();
+				}
 			}
 
+		} catch (InterruptedException e) {
+			// throw( new IOException(e) );
+			// should be because we are tidily closing down
+			logger.finest("exiting sendFromTransit due to interrupt");
 		}
 
+		logger.exiting(this.getClass().getName(), "sendFromTransit");
+
 	}
-	
-//	private void logTransitProps(String who) {
-//		System.out.println(who);
-//		System.out.println("Position "+transitBuffer.position());
-//		System.out.println("Limit "+transitBuffer.limit());
-//		System.out.println("");
-//		
-//	}
+
+	//	private void logTransitProps(String who) {
+	//		System.out.println(who);
+	//		System.out.println("Position "+transitBuffer.position());
+	//		System.out.println("Limit "+transitBuffer.limit());
+	//		System.out.println("");
+	//		
+	//	}
 
 	@Override
 	/**
 	 * Copy data into transit buffer and signal data available to send
 	 */
 	public void write(int b) throws IOException {
-		logger.log(Level.FINE,"write(b)");
-		
+		logger.entering(this.getClass().getName(), "write", b);
+
 		if ( closed ) 
 			throw( new IOException("stream is closed") );
 
 		try {
 			bufferLock.lock();
 
-			while ( transitAvailableToWrite.get() < 1 )
+			if ( closed ) 
+				throw( new IOException("stream is closed") );
+
+			while ( transitAvailableToWrite.get() < 1 ) {
 				spaceAvailableToWrite.await();
 
+				if ( closed ) 
+					throw( new IOException("stream is closed") );
+			}
+			
 			if ( mode != BufferMode.WRITE ) {
 				mode = BufferMode.WRITE;
 				transitBuffer.compact();
 			}	
 
 			// logTransitProps("Writing Transit Buffer");
-			
+
 			transitBuffer.put((byte) b);
 
 			transitAvailableToWrite.addAndGet(-1);
@@ -194,17 +211,19 @@ public class StreamOutputStream extends OutputStream {
 			bufferLock.unlock();
 		}
 
-
+		logger.exiting(this.getClass().getName(), "write");
 	}
 
 	@Override
 	public void write(byte[] b) throws IOException {
-		logger.log(Level.FINE,"write([]b)");
-				
+		logger.entering(this.getClass().getName(), "write", b);
+
 		if ( b == null )
 			throw( new NullPointerException("buffer may not be null") );
 
 		write(b, 0, b.length);
+
+		logger.exiting(this.getClass().getName(), "write");
 	}
 
 	@Override
@@ -212,8 +231,9 @@ public class StreamOutputStream extends OutputStream {
 	 * Copy data into transit buffer and signal data available to send
 	 */
 	public void write(byte[] b, int off, int len) throws IOException {
-		logger.log(Level.FINE,"write(b,o,l)");
-		
+		logger.entering(this.getClass().getName(), "write",
+				new Object[] { b, Integer.valueOf(off), Integer.valueOf(len) });
+
 		if ( b == null )
 			throw( new NullPointerException("buffer may not be null") );
 
@@ -222,15 +242,22 @@ public class StreamOutputStream extends OutputStream {
 
 
 		int bytesTransferred = 0;
-		
+
 		// we may not be able to copy all in at once
 		while ( bytesTransferred < len )
 		{
 			try {
 				bufferLock.lock();
 
-				while ( transitAvailableToWrite.get() < 1 )
+				if ( closed ) 
+					throw( new IOException("stream is closed") );
+
+				while ( transitAvailableToWrite.get() < 1 ) {
 					spaceAvailableToWrite.await();
+
+					if ( closed ) 
+						throw( new IOException("stream is closed") );
+				}
 
 				if ( mode != BufferMode.WRITE ) {
 					mode = BufferMode.WRITE;
@@ -258,18 +285,32 @@ public class StreamOutputStream extends OutputStream {
 			}
 		}
 
+		logger.exiting(this.getClass().getName(), "write");
 	}
 
 	@Override
 	public void close() throws IOException {
-		logger.log(Level.FINE,"close");
+		logger.entering(this.getClass().getName(), "close");
 		closed = true;
+
+		sendFromTransitThread.interrupt();
+
+		try {
+			bufferLock.lock();
+			spaceAvailableToWrite.signalAll();
+			dataAvailableToRead.signalAll();
+		} finally {
+			bufferLock.unlock();
+		}
+
+		logger.exiting(this.getClass().getName(), "close");
 	}
 
 	@Override
 	public void flush() throws IOException {
-		logger.log(Level.FINE,"flush");
-		// wait until all transit buffer contents emptied
+		logger.entering(this.getClass().getName(), "flush");
+
+		// TODO: wait until all transit buffer contents emptied
 	}
 
 }

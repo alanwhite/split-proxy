@@ -32,7 +32,7 @@ class IntegrationTests {
 		var logger = Logger.getLogger("xyz.arwhite.net");
 		var c = new ConsoleHandler();
 		logger.addHandler(c);
-		c.setLevel(Level.FINEST);
+		c.setLevel(Level.FINE);
 		logger.setLevel(Level.FINER);
 		
 		var serverHandler = new WsPriorityMessageHandler();
@@ -41,12 +41,21 @@ class IntegrationTests {
 				.withEndpoint("127.0.0.1")
 				.listen();
 		
-		var linkServerMux = new StreamController.Builder()
+		var serverMuxController = new StreamController.Builder()
 				.withMessageLink(wsServerLink).build();
 		
 		var muxServerSocketFactory = new MuxServerSocketFactory.Builder()
-				.withMux(linkServerMux)
+				.withMux(serverMuxController)
 				.build();
+		
+//		var muxServe2 = new MuxServerSocketFactory.Builder()
+//				.withMux(new StreamController.Builder()
+//						.withMessageLink(new WsMessageLink.Builder()
+//								.withMessageBroker(new WsPriorityMessageHandler())
+//								.withEndpoint("127.0.0.1")
+//								.listen())
+//						.build())
+//				.build();
 		
 		var clientHandler = new WsPriorityMessageHandler();
 		var wsClientLink = new WsMessageLink.Builder()
@@ -55,19 +64,13 @@ class IntegrationTests {
 				.withPort(wsServerLink.getLocalPort())
 				.connect();
 		
-		var linkClientMux = new StreamController.Builder()
+		var clientMuxController = new StreamController.Builder()
 				.withMessageLink(wsClientLink)
 				.build();
 		
 		var muxSocketFactory = new MuxSocketFactory.Builder()
-				.withMux(linkClientMux)
+				.withMux(clientMuxController)
 				.build();
-		
-//		var logM = LogManager.getLogManager();
-//		logM.getLoggerNames().asIterator().forEachRemaining(s -> System.out.println(s));
-
-
-		
 		
 		testPattern(muxServerSocketFactory,muxSocketFactory,1);
 	}

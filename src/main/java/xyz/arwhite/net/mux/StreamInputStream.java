@@ -24,7 +24,7 @@ public class StreamInputStream extends InputStream {
 	private AtomicInteger available = new AtomicInteger(0);
 	private final ReentrantLock bufferLock = new ReentrantLock();
 	private Condition dataAvailableToRead = bufferLock.newCondition();
-	private boolean closed = false;
+	private volatile boolean closed = false;
 	
 	private final LinkedTransferQueue<Integer> freeNotificationQueue = new LinkedTransferQueue<>();
 	
@@ -81,8 +81,14 @@ public class StreamInputStream extends InputStream {
 		try {
 			bufferLock.lock();
 			
+			if ( closed )
+				throw( new IOException("stream is closed") );
+			
 			while ( available.get() < 1 )
 				dataAvailableToRead.await();
+			
+			if ( closed )
+				throw( new IOException("stream is closed") );
 			
 			if ( mode != BufferMode.READ ) {
 				mode = BufferMode.READ;
@@ -122,8 +128,14 @@ public class StreamInputStream extends InputStream {
 		try {
 			bufferLock.lock();
 			
+			if ( closed )
+				throw( new IOException("stream is closed") );
+			
 			while ( available.get() < 1 )
 				dataAvailableToRead.await();
+			
+			if ( closed )
+				throw( new IOException("stream is closed") );
 			
 			if ( mode != BufferMode.READ ) {
 				mode = BufferMode.READ;
@@ -162,6 +174,9 @@ public class StreamInputStream extends InputStream {
 	@Override
 	public void close() throws IOException {
 		closed = true;
+		
+		// interrupt waiters
+		bufferLock.notifyAll();
 	}
 
 	@Override

@@ -55,7 +55,8 @@ public class StreamServer {
 	 * @param port the logical stream port that this StreamServer listens on
 	 */
 	public StreamServer(StreamController controller, int port) {
-		logger.log(Level.FINE,"StreamServer(c,p)");
+		logger.entering(this.getClass().getName(), "Constructor", 
+				new Object[] { controller, Integer.valueOf(port) });
 		
 		this.controller = controller;
 		this.port = port;
@@ -70,6 +71,8 @@ public class StreamServer {
 		} else 
 			if ( !controller.registerStreamServer(port, this) )
 				throw (new IllegalArgumentException("port already in use"));
+		
+		logger.exiting(this.getClass().getName(), "Constructor", this.port);
 
 	}
 
@@ -81,10 +84,12 @@ public class StreamServer {
 	 * @return
 	 */
 	public boolean connectStream(Stream stream) {
-		logger.log(Level.FINE,"connectStream(s)");
+		logger.entering(this.getClass().getName(), "connectStream", stream);
 		
 		var conn = new ConnectionEntry(new CompletableFuture<Void>(), stream);
 
+		var outcome = false; 
+		
 		if ( connections.offer(conn) ) {
 
 			controller.send(
@@ -98,7 +103,7 @@ public class StreamServer {
 			
 			conn.connected().complete(null);
 
-			return true;
+			outcome = true;
 
 		} else {	
 
@@ -108,8 +113,11 @@ public class StreamServer {
 							stream.getRemoteId(), 
 							StreamConstants.PENDING_STREAM_PORT_CONNECTIONS_EXCEEDED));
 
-			return false;
+			outcome = false;
 		}
+		
+		logger.exiting(this.getClass().getName(), "connectStream", outcome);
+		return outcome;
 	}
 
 	/**
@@ -119,7 +127,7 @@ public class StreamServer {
 
 	 */
 	public Stream accept() throws InterruptedException, ExecutionException {
-		logger.log(Level.FINE,"accept");
+		logger.entering(this.getClass().getName(), "accept");
 		
 		var conn = connections.take();
 
@@ -127,22 +135,28 @@ public class StreamServer {
 		if ( !conn.connected.isDone() ) 
 			conn.connected.get();
 		
-		return conn.stream();
+		var outcome = conn.stream();
+		
+		logger.exiting(this.getClass().getName(), "accept", outcome);
+		return outcome;
 	}
 
 	/**
 	 * Stop new Streams being received on this StreamServers stream port
 	 */
 	public void close() {
-		logger.log(Level.FINE,"close");
+		logger.entering(this.getClass().getName(), "close");
 		
 		if ( !controller.deregisterStreamServer(port) ) 
 			throw (new IllegalArgumentException("port not in use"));
+		
+		logger.exiting(this.getClass().getName(), "close");
 	}
 
 	public int getPort() {
-		logger.log(Level.FINE,"getPort");
+		logger.entering(this.getClass().getName(), "getPort");
 		
+		logger.exiting(this.getClass().getName(), "getPort", port);
 		return port;
 	}
 }

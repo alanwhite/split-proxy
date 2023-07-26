@@ -96,6 +96,9 @@ public class Stream {
 	private StreamInputStream inputStream = new StreamInputStream(4096);
 	private StreamOutputStream outputStream;
 	
+	private Thread freedBytesListener;
+	private Thread peerIncomingListener;
+	
 	/**
 	 * Constructor used by a StreamController to create a Stream, either as a result of a request
 	 * to connect a Stream across the WebSocket, ie receiving a connect request from the peer.
@@ -133,10 +136,10 @@ public class Stream {
 	 * consumer of this Stream.
 	 */
 	public Stream() {
-		logger.fine("Stream");
+		logger.entering(this.getClass().getName(), "Constructor");
 		
 		// TODO: test buffer increment flow
-		Thread.ofVirtual().start(() -> {
+		this.freedBytesListener = Thread.ofVirtual().start(() -> {
 			var q = inputStream.getFreeNotificationQueue();
 			
 			boolean completed = false;
@@ -153,14 +156,18 @@ public class Stream {
 				}
 			}
 		});
+		
+		logger.exiting(this.getClass().getName(), "Constructor");	
 
 	}
 
 	private void startReceiver(ArrayBlockingQueue<BufferData> peerIncoming) {
-		logger.fine("startReceiver");
+		logger.entering(this.getClass().getName(), "startReceiver", peerIncoming);
 		
-		Thread.ofVirtual().start(
+		this.peerIncomingListener = Thread.ofVirtual().start(
 				new Incoming(peerIncoming));
+
+		logger.exiting(this.getClass().getName(), "startReceiver");	
 	}
 
 	class Incoming implements Runnable {
@@ -325,7 +332,10 @@ public class Stream {
 				
 				logger.finer("peerIncoming receiver tidily closed");
 				
-			} catch(InterruptedException | IllegalStateException e) {
+			} catch(InterruptedException ie) {
+				state = StreamState.CLOSED;
+				
+			} catch(IllegalStateException e) {
 				logger.log(Level.SEVERE,"stream terminated by exception");
 				streamController.deregisterStream(localId);
 				state = StreamState.ERROR;
@@ -355,20 +365,15 @@ public class Stream {
 
 		logger.fine("connect");
 		
-//		if ( !(endpoint instanceof StreamSocketAddress) )
-//			throw(new IOException("endpoint must be of type StreamSocketAddress") );
-
 		if ( state != StreamState.UNCONNECTED )
 			throw(new IOException("Invalid state transition - Stream must be in an unconnected state"));
 
-//		StreamSocketAddress ssa = (StreamSocketAddress) endpoint;
 		if ( endpoint instanceof InetSocketAddress ) {
 			var ep = (InetSocketAddress) endpoint;
 			setStreamPort(ep.getPort());
-		}
+		} else
+			throw(new IOException("Unsupported endpoint type - only InetSocketAddress possible"));
 		
-//		setStreamController(ssa.getStreamController());
-
 		try {
 			this.localId = streamController.registerStream(this);
 
@@ -435,6 +440,22 @@ public class Stream {
 				throw(new SocketTimeoutException());
 			
 			throw(new IOException("error disconnecting stream",e));
+		}
+	}
+	
+	/**
+	 * Tidy close down of local threads, no more IO is possible
+	 */
+	protected void stop() {
+		state = StreamState.CLOSED;
+		this.freedBytesListener.interrupt();
+		this.peerIncomingListener.interrupt();
+		
+		try {
+			this.inputStream.close();
+			this.outputStream.close();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	
