@@ -311,6 +311,8 @@ public class StreamOutputStream extends OutputStream {
 		logger.entering(this.getClass().getName(), "flush");
 
 		// TODO: wait until all transit buffer contents emptied
+		
+		logger.exiting(this.getClass().getName(), "flush");
 	}
 
 }

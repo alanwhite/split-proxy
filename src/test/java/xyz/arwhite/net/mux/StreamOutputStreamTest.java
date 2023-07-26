@@ -213,7 +213,7 @@ class StreamOutputStreamTest {
 		final var maxC = 10;
 		for ( int c = 0; c < maxC; c++ ) {
 			if ( t.getState() == State.WAITING ) {
-				System.out.println("thread wait achieved in "+c+" cycles");
+				// System.out.println("thread wait achieved in "+c+" cycles");
 				break;
 			}
 			
