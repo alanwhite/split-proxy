@@ -2,10 +2,8 @@ package xyz.arwhite.net.mux;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.lang.Thread.State;
@@ -89,6 +87,8 @@ class StreamOutputStreamTest {
 		});
 
 		assertEquals(false,y.isDone());
+		assertDoesNotThrow(
+				() -> waitThreadState(t, State.WAITING, Duration.ofMillis(200), Duration.ofSeconds(2)));
 		assertEquals(State.WAITING, t.getState());
 
 		// send buffer increment of 1024
@@ -104,6 +104,8 @@ class StreamOutputStreamTest {
 		// still not enough to liberate the write
 
 		assertEquals(false,y.isDone());
+		assertDoesNotThrow(
+				() -> waitThreadState(t, State.WAITING, Duration.ofMillis(200), Duration.ofSeconds(2)));
 		assertEquals(State.WAITING, t.getState());
 
 		// send additional buffer increment of 1024
