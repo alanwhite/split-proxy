@@ -2,6 +2,7 @@ package xyz.arwhite.net.mux;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -34,11 +35,7 @@ class StreamOutputStreamTest {
 
 		};
 
-		StreamController sc = new StreamController() {
-
-		};
-
-		// probably need to fake a connect somehow ... shall see
+		StreamController sc = new StreamController() {};
 
 		// set up outputstream
 		s.setStreamController(sc);
@@ -60,9 +57,7 @@ class StreamOutputStreamTest {
 
 		// quota = 2048 avbl, transit = 4096 free
 
-
-		// write 4096 bytes
-		// write won't stall as there's space in transit
+		// write 4096 bytes - won't stall as there's space in transit
 
 		var b4096 = ByteBuffer.allocate(4096);
 		assertDoesNotThrow(() -> o.write(b4096.array(), 0, 4096));
@@ -210,19 +205,10 @@ class StreamOutputStreamTest {
 
 		assertEquals(false,y.isDone());
 
-		final var maxC = 10;
-		for ( int c = 0; c < maxC; c++ ) {
-			if ( t.getState() == State.WAITING ) {
-				// System.out.println("thread wait achieved in "+c+" cycles");
-				break;
-			}
-			
-			if ( c < maxC )
-				assertDoesNotThrow(() -> Thread.sleep(Duration.ofMillis(200)));
-		}
+		assertDoesNotThrow(
+				() -> waitThreadState(t, State.WAITING, Duration.ofMillis(200), Duration.ofSeconds(2)));
 		
-		if ( t.getState() != State.WAITING ) 
-			fail("timeout waiting for thread to suspend");
+		assertEquals(State.WAITING, t.getState());
 		
 		// stop the outputstream, should terminate the write		
 		o.close();
@@ -236,5 +222,25 @@ class StreamOutputStreamTest {
 		// observe 4096 being sent
 	
 		// transitbuffer should be empty now
+	}
+	
+	/**
+	 * Utility to wait for a Thread to achieve a given State. Useful when a background 
+	 * Thread has been launched and another Thread needs to know when a certain State 
+	 * has been achieved, e.g. WAITING.
+	 * 
+	 * @param t the Thread whose state is to be waited for
+	 * @param state the State that is to be waited for
+	 * @param checkFrequency how often the State should be checked
+	 * @param maxWaitTime timeout value after which waiting will terminate
+	 * @throws InterruptedException is thrown if the thread is interrupted between State checks
+	 */
+	private void waitThreadState(Thread t, State state, Duration checkFrequency, Duration maxWaitTime) throws InterruptedException {
+
+		var maxTimes = maxWaitTime.dividedBy(checkFrequency);
+		var times = 0;
+		
+		while ( times++ < maxTimes && t.getState() != state ) 
+			Thread.sleep(checkFrequency);
 	}
 }

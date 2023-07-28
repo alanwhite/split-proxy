@@ -135,7 +135,6 @@ public class StreamOutputStream extends OutputStream {
 						bytesRead = transitBuffer.remaining();
 
 					stream.sendData(transitBuffer, bytesRead);
-					// logTransitProps("After Send");
 
 					remoteFreeCapacity.addAndGet(-bytesRead);
 					transitAvailableToRead.addAndGet(-bytesRead);
@@ -144,13 +143,11 @@ public class StreamOutputStream extends OutputStream {
 					spaceAvailableToWrite.signalAll();
 
 				} finally {
-					// logTransitProps("After Offloading");
 					bufferLock.unlock();
 				}
 			}
 
 		} catch (InterruptedException e) {
-			// throw( new IOException(e) );
 			// should be because we are tidily closing down
 			logger.finest("exiting sendFromTransit due to interrupt");
 		}
@@ -168,48 +165,48 @@ public class StreamOutputStream extends OutputStream {
 	//	}
 
 	@Override
-	/**
-	 * Copy data into transit buffer and signal data available to send
-	 */
 	public void write(int b) throws IOException {
 		logger.entering(this.getClass().getName(), "write", b);
 
-		if ( closed ) 
-			throw( new IOException("stream is closed") );
-
-		try {
-			bufferLock.lock();
-
-			if ( closed ) 
-				throw( new IOException("stream is closed") );
-
-			while ( transitAvailableToWrite.get() < 1 ) {
-				spaceAvailableToWrite.await();
-
-				if ( closed ) 
-					throw( new IOException("stream is closed") );
-			}
-			
-			if ( mode != BufferMode.WRITE ) {
-				mode = BufferMode.WRITE;
-				transitBuffer.compact();
-			}	
-
-			// logTransitProps("Writing Transit Buffer");
-
-			transitBuffer.put((byte) b);
-
-			transitAvailableToWrite.addAndGet(-1);
-			transitAvailableToRead.addAndGet(1);
-			dataAvailableToRead.signalAll();
-
-		} catch (InterruptedException e) {
-			throw( new IOException(e) );
-
-		} finally {
-			// logTransitProps("After writing Transit Buffer");
-			bufferLock.unlock();
-		}
+		byte[] ba = { (byte) b };
+		this.write(ba, 0, 1);
+		
+//		if ( closed ) 
+//			throw( new IOException("stream is closed") );
+//
+//		try {
+//			bufferLock.lock();
+//
+//			if ( closed ) 
+//				throw( new IOException("stream is closed") );
+//
+//			while ( transitAvailableToWrite.get() < 1 ) {
+//				spaceAvailableToWrite.await();
+//
+//				if ( closed ) 
+//					throw( new IOException("stream is closed") );
+//			}
+//			
+//			if ( mode != BufferMode.WRITE ) {
+//				mode = BufferMode.WRITE;
+//				transitBuffer.compact();
+//			}	
+//
+//			// logTransitProps("Writing Transit Buffer");
+//
+//			transitBuffer.put((byte) b);
+//
+//			transitAvailableToWrite.addAndGet(-1);
+//			transitAvailableToRead.addAndGet(1);
+//			dataAvailableToRead.signalAll();
+//
+//		} catch (InterruptedException e) {
+//			throw( new IOException(e) );
+//
+//		} finally {
+//			// logTransitProps("After writing Transit Buffer");
+//			bufferLock.unlock();
+//		}
 
 		logger.exiting(this.getClass().getName(), "write");
 	}
